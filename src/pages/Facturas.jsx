@@ -387,7 +387,8 @@ function Facturas() {
                           'inline-block px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ' +
                           SUBTIPO_BADGE[f.subtipo].cls
                         }>
-                          {SUBTIPO_BADGE[f.subtipo].label}
+                          {/* v1.4.0: titulo custom si existe. */}
+                          {f.titulo_documento_override || SUBTIPO_BADGE[f.subtipo].label}
                         </span>
                       )}
                       {f.subtipo === 'proforma' && proformasConvertidas[f.id] ? (

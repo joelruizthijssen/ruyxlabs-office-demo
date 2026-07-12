@@ -188,9 +188,17 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   // veremos al render emisor en cada plantilla). La BD sigue guardando
   // numero/datos/etc. normalmente; solo cambia el render.
   const docInterno = tipo === 'factura' && !!d.documento_interno;
+  // v1.4.0: titulo custom del documento (override). Prioridad:
+  //   docInterno > titulo_documento_override > default por subtipo.
+  const tituloOverride =
+    typeof d.titulo_documento_override === 'string' && d.titulo_documento_override.trim()
+      ? d.titulo_documento_override.trim().toUpperCase()
+      : null;
   let tituloDoc;
   if (docInterno) {
     tituloDoc = 'RESUMEN DE TRABAJOS';
+  } else if (tituloOverride) {
+    tituloDoc = tituloOverride;
   } else if (tipo === 'presupuesto') {
     tituloDoc = 'PRESUPUESTO';
   } else if (subtipo === 'proforma') {

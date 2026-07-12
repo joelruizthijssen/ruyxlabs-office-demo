@@ -75,9 +75,20 @@ function FacturaEditor() {
     subtipo: 'factura',
     proforma_origen_id: null,
     convertida_a: null,
+    // v1.4.0: nombre custom del documento. Cuando NO es vacio sustituye el
+    // titulo por defecto ("PROFORMA", "FACTURA", etc.) en el PDF y listado.
+    titulo_documento_override: '',
   });
   const [cabOriginal, setCabOriginal] = useState(cab);
   const [marcas, setMarcas] = useState([]);
+
+  // v1.4.0: state local del input del numero para evitar el bug del
+  // autoguardado con valor stale. Ver comentario detallado en la app
+  // (electron/facturas-app version). Solo propaga a cab.numero en onBlur.
+  const [numeroInput, setNumeroInput] = useState('');
+  useEffect(() => {
+    setNumeroInput(cab.numero || '');
+  }, [cab.numero]);
 
   useEffect(() => {
     if (!window.api?.marcas) return;
@@ -142,6 +153,7 @@ function FacturaEditor() {
         subtipo: f.subtipo || 'factura',
         proforma_origen_id: f.proforma_origen_id || null,
         convertida_a: f.convertida_a || null,
+        titulo_documento_override: f.titulo_documento_override || '',
       };
       // Autorrelleno de IRPF al cargar: si la factura es borrador, no tiene
       // IRPF puesto todavia, y el cliente tiene un default > 0, aplicarlo.
@@ -908,15 +920,54 @@ function FacturaEditor() {
               <label className={labelCls}>Número de factura</label>
               <input
                 className={inputCls}
-                value={cab.numero || ''}
+                value={numeroInput}
                 disabled={bloqueada}
-                onChange={(e) => setCabField('numero', e.target.value)}
+                onChange={(e) => setNumeroInput(e.target.value)}
+                onBlur={() => {
+                  const trimmed = numeroInput.trim();
+                  if (trimmed !== (cab.numero || '')) {
+                    setCabField('numero', trimmed);
+                  } else if (trimmed !== numeroInput) {
+                    setNumeroInput(trimmed);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
               />
               <p className="text-xs text-slate-500 mt-1">
                 Se asigna automáticamente. Puedes cambiarlo si lo necesitas;
                 no puede repetirse con el de otra factura.
               </p>
             </div>
+            {/* v1.4.0: nombre custom del documento. Solo para subtipos !== factura. */}
+            {cab.subtipo !== 'factura' && (
+              <div>
+                <label className={labelCls}>Título del documento (opcional)</label>
+                <input
+                  className={inputCls}
+                  value={cab.titulo_documento_override || ''}
+                  disabled={bloqueada}
+                  placeholder={
+                    cab.subtipo === 'proforma'
+                      ? 'p.ej. Factura Proforma, Confirmación de pedido…'
+                      : cab.subtipo === 'nota_contado'
+                        ? 'p.ej. Nota de contado, Recibo…'
+                        : cab.subtipo === 'rectificativa'
+                          ? 'p.ej. Factura Rectificativa, Nota de abono…'
+                          : ''
+                  }
+                  onChange={(e) => setCabField('titulo_documento_override', e.target.value)}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Si lo dejas vacío se usa el título por defecto (
+                  {cab.subtipo === 'proforma' && 'PROFORMA'}
+                  {cab.subtipo === 'nota_contado' && 'NOTA CONTADO'}
+                  {cab.subtipo === 'rectificativa' && 'FACTURA RECTIFICATIVA'}
+                  ). Aparece en el PDF y en el listado.
+                </p>
+              </div>
+            )}
             {marcas.length > 0 && (
               <div>
                 <label className={labelCls}>Marca</label>

@@ -561,6 +561,13 @@ function _runMigrations() {
   _ensureColumn('facturas', 'proforma_origen_id', 'proforma_origen_id INTEGER');
   _ensureColumn('cobros', 'mostrar_en_pdf', 'mostrar_en_pdf INTEGER DEFAULT 0');
 
+  // v1.4.0 (sync desde app): titulo custom del documento. Cuando NO es NULL/
+  // vacio, sustituye el titulo por defecto ("PROFORMA", "FACTURA", etc.) en
+  // el PDF y en el listado. Aplica sobre todo a proformas (renombrar como
+  // "Confirmacion de pedido" o "Factura Proforma" segun empresa).
+  _ensureColumn('facturas', 'titulo_documento_override', 'titulo_documento_override TEXT');
+  _ensureColumn('presupuestos', 'titulo_documento_override', 'titulo_documento_override TEXT');
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS pedidos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

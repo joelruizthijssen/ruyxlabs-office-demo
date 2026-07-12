@@ -42,7 +42,8 @@ export function facturasList() {
     SELECT f.id, f.numero, f.serie, f.subtipo, f.fecha, f.fecha_vencimiento,
            f.cliente_id, f.asunto, c.nombre AS cliente_nombre,
            f.base_imponible, f.iva_importe, f.total, f.estado, f.presupuesto_id,
-           f.proforma_origen_id, f.enviado_at
+           f.proforma_origen_id, f.enviado_at,
+           f.titulo_documento_override
     FROM facturas f
     LEFT JOIN clientes c ON c.id = f.cliente_id
     WHERE f.deleted_at IS NULL${sc.sql}
@@ -152,6 +153,11 @@ export function facturasUpdate(id, data) {
       nuevoNumero = n;
     }
   }
+  // v1.4.0 sync desde app: titulo custom del documento. Trim + null si vacio.
+  const tituloOverride =
+    typeof m.titulo_documento_override === 'string' && m.titulo_documento_override.trim()
+      ? m.titulo_documento_override.trim()
+      : null;
   db.prepare(`
     UPDATE facturas SET
       numero = :numero, fecha = :fecha, fecha_vencimiento = :fecha_venc, ciudad_emision = :ciudad,
@@ -160,7 +166,9 @@ export function facturasUpdate(id, data) {
       estado = :estado, modo_detallado = :modo_detallado,
       factura_ocultar_subitems = :ocultar_subs, documento_interno = :doc_interno,
       irpf_pct = :irpf, serie = :serie, marca_id = :marca_id,
-      descuento_tipo = :dtipo, descuento_valor = :dvalor, updated_at = datetime('now')
+      descuento_tipo = :dtipo, descuento_valor = :dvalor,
+      titulo_documento_override = :titulo_override,
+      updated_at = datetime('now')
     WHERE id = :id
   `).run({
     ':id': id, ':fecha': m.fecha, ':fecha_venc': m.fecha_vencimiento || null,
@@ -177,6 +185,7 @@ export function facturasUpdate(id, data) {
     ':marca_id': m.marca_id ? Number(m.marca_id) : null,
     ':dtipo': m.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(m.descuento_valor) || 0,
+    ':titulo_override': tituloOverride,
   });
   if (m.modo_detallado) {
     const lineas = db.prepare('SELECT id FROM lineas_factura WHERE factura_id = ?').all([id]);
