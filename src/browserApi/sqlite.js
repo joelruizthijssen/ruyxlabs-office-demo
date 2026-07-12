@@ -13,17 +13,23 @@
 //   db.close()
 
 import initSqlJs from 'sql.js';
+// Import del .wasm como URL de asset gestionado por Vite. En dev sirve el
+// fichero desde node_modules; en build lo copia a dist/assets/ con hash y
+// cache-busting. Mas robusto que depender de `locateFile` + public/ porque:
+//   1. No hay riesgo de colision con SPA rewrites (Vercel).
+//   2. Cache immutable seguro (el hash cambia si el .wasm cambia).
+//   3. Path resuelto por Vite: funciona igual en dev, preview y produccion.
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 let SQL = null;
 let sqlReadyPromise = null;
 
 // Inicializa sql.js una vez. Devuelve la instancia global. Todos los usos
-// posteriores usan la misma. En dev y produccion cargamos el .wasm desde
-// /sql-wasm.wasm (copiado a public/ al bootear).
+// posteriores usan la misma.
 export function initSql() {
   if (sqlReadyPromise) return sqlReadyPromise;
   sqlReadyPromise = initSqlJs({
-    locateFile: (file) => `/${file}`,
+    locateFile: () => sqlWasmUrl,
   }).then((instance) => {
     SQL = instance;
     return instance;
