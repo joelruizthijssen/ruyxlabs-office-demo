@@ -3,6 +3,7 @@ import { TEMPLATES } from '../pdf/templates/index.js';
 import TemplateThumb from '../components/TemplateThumb.jsx';
 import SeriesEditor from '../components/SeriesEditor.jsx';
 import MarcasManager from '../components/MarcasManager.jsx';
+import SociosManager from '../components/SociosManager.jsx';
 import LicenseSection from '../components/LicenseSection.jsx';
 import EmpresaModal from '../components/EmpresaModal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -1474,6 +1475,14 @@ function Ajustes() {
 
         {/* 3c) Marcas (nombre comercial + logo + color por NIF) */}
         <MarcasManager />
+
+        {/* 3d) Socios internos (v1.5.0) */}
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">
+            Socios internos
+          </h2>
+          <SociosManager />
+        </section>
 
         {/* 5) Copia de seguridad */}
         <section>

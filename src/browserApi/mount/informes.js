@@ -8,6 +8,7 @@ import {
   dianaCierresList, dianaCierresUltimo, dianaCierresCreate, dianaCierresDelete,
   informesMarcas, informesMarcasDetalle, informesDiana,
 } from '../repository/informes.js';
+import { informesSocio } from '../repository/socios.js';
 
 export default function mount() {
   overrideApi('home', {
@@ -45,6 +46,7 @@ export default function mount() {
     marcas: (opts) => informesMarcas(opts),
     marcasDetalle: (opts) => informesMarcasDetalle(opts),
     diana: (opts) => informesDiana(opts),
+    socio: (opts) => informesSocio(opts),
   });
   // Notif y recurrencias mantienen stubs vacios (aceptable en demo web).
 }

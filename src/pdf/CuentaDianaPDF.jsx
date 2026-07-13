@@ -124,10 +124,13 @@ function Card({ label, value, hint, color, bg, big }) {
   );
 }
 
-function TipoBadge({ tipo }) {
+function TipoBadge({ tipo, socioNombre }) {
   if (tipo === 'venta') return <Text style={[styles.badge, { backgroundColor: EMERALD_BG, color: EMERALD }]}>Venta</Text>;
   if (tipo === 'gasto') return <Text style={[styles.badge, { backgroundColor: RED_BG, color: RED }]}>Gasto</Text>;
-  if (tipo === 'pago_diana') return <Text style={[styles.badge, { backgroundColor: VIOLET_BG, color: VIOLET }]}>Pago D.</Text>;
+  if (tipo === 'pago_diana' || tipo === 'pago_socio') {
+    const label = socioNombre ? `Pago ${(socioNombre || '?')[0].toUpperCase()}.` : 'Pago';
+    return <Text style={[styles.badge, { backgroundColor: VIOLET_BG, color: VIOLET }]}>{label}</Text>;
+  }
   if (tipo === 'movimiento') return <Text style={[styles.badge, { backgroundColor: SKY_BG, color: SKY }]}>Movim.</Text>;
   return <Text> </Text>;
 }
@@ -144,17 +147,23 @@ function CuentaDianaPDF({ informe, meta }) {
   const { desde, hasta, filas, totales } = informe || {};
   const empresa = meta?.empresa || {};
   const saldoInicial = meta?.saldoInicial || 0;
+  // v1.5.0: nombre dinamico del socio. Fallback a "Diana" para PDFs viejos
+  // generados sin este campo. `informe.socio_nombre` viene de informes_socio.
+  const socioNombre = meta?.socioNombre || informe?.socio_nombre || 'Diana';
+  void saldoInicial;
   const fechaGen = new Date().toLocaleDateString('es-ES', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   });
+  // Compatibilidad: el field puede llegar como `socio_importe` (nuevo) o
+  // `diana_importe` (viejo). Preferimos socio_importe si existe.
+  const getImp = (f) => (typeof f?.socio_importe === 'number' ? f.socio_importe : (Number(f?.diana_importe) || 0));
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Cabecera */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.titulo}>Cuenta interna de Diana</Text>
+            <Text style={styles.titulo}>Cuenta interna de {socioNombre}</Text>
             <Text style={styles.subtitulo}>
               Periodo: {formatFechaES(desde)} – {formatFechaES(hasta)}
             </Text>
@@ -169,7 +178,6 @@ function CuentaDianaPDF({ informe, meta }) {
         </View>
         <View style={styles.banda} />
 
-        {/* Totales del periodo: 4 cards */}
         <View style={styles.cardsRow}>
           <Card
             label="Ventas (cobradas)"
@@ -188,20 +196,19 @@ function CuentaDianaPDF({ informe, meta }) {
           <Card
             label="Gastos compartidos"
             value={totales?.compras_realizado || 0}
-            hint="D resta · E suma"
+            hint="Impacto neto sobre el saldo"
             color={RED}
             bg={RED_BG}
           />
           <Card
-            label="Pagos a Diana"
+            label={`Pagos a ${socioNombre}`}
             value={-(totales?.pagos_realizados || 0)}
-            hint="Ya pagado a Diana"
+            hint={`Ya pagado a ${socioNombre}`}
             color={VIOLET}
             bg={VIOLET_BG}
           />
         </View>
 
-        {/* Saldos: 3 cards */}
         <View style={styles.cardsRow}>
           <Card
             label="Saldo arrastrado"
@@ -222,18 +229,17 @@ function CuentaDianaPDF({ informe, meta }) {
           <Card
             label="SALDO ACTUAL"
             value={totales?.saldo_final || 0}
-            hint="Positivo = Ellen debe a Diana"
+            hint={`Positivo = le debes a ${socioNombre}`}
             color={FUCHSIA}
             bg={FUCHSIA_BG}
             big
           />
         </View>
 
-        {/* Tabla de movimientos */}
         <Text style={styles.sectionTitle}>Movimientos del periodo</Text>
         {(!filas || filas.length === 0) ? (
           <Text style={{ fontSize: 10, color: SLATE_DIM, paddingVertical: 12 }}>
-            No hay movimientos de Diana en este periodo.
+            No hay movimientos de {socioNombre} en este periodo.
           </Text>
         ) : (
           <View>
@@ -242,48 +248,50 @@ function CuentaDianaPDF({ informe, meta }) {
               <Text style={styles.thTipo}>Tipo</Text>
               <Text style={styles.thConcepto}>Concepto</Text>
               <Text style={styles.thBase}>Base</Text>
-              <Text style={styles.thDiana}>Diana</Text>
+              <Text style={styles.thDiana}>{socioNombre}</Text>
               <Text style={styles.thEstado}>Estado</Text>
             </View>
-            {filas.map((f, idx) => (
-              <View
-                key={`${f.tipo}-${f.ref_id}-${idx}`}
-                style={[styles.tableRow, { alignItems: 'flex-start' }]}
-              >
-                <Text style={styles.tdFecha}>{formatFechaES(f.fecha)}</Text>
-                <View style={styles.tdTipo}><TipoBadge tipo={f.tipo} /></View>
-                <View style={{ flex: 1, paddingRight: 4, flexDirection: 'column' }}>
-                  <Text style={styles.tdConcepto}>
-                    {f.ref_numero ? `${f.ref_numero} · ` : ''}{f.concepto || '—'}
+            {filas.map((f, idx) => {
+              const imp = getImp(f);
+              return (
+                <View
+                  key={`${f.tipo}-${f.ref_id}-${idx}`}
+                  style={[styles.tableRow, { alignItems: 'flex-start' }]}
+                >
+                  <Text style={styles.tdFecha}>{formatFechaES(f.fecha)}</Text>
+                  <View style={styles.tdTipo}><TipoBadge tipo={f.tipo} socioNombre={socioNombre} /></View>
+                  <View style={{ flex: 1, paddingRight: 4, flexDirection: 'column' }}>
+                    <Text style={styles.tdConcepto}>
+                      {f.ref_numero ? `${f.ref_numero} · ` : ''}{f.concepto || '—'}
+                    </Text>
+                    {f.notas ? (
+                      <Text style={{ fontSize: 8, color: SLATE_DIM, fontStyle: 'italic', marginTop: 1 }}>
+                        {f.notas}
+                      </Text>
+                    ) : null}
+                    {f.tipo === 'venta' && f.realizado && f.fecha_emision && f.fecha_emision !== f.fecha ? (
+                      <Text style={{ fontSize: 7.5, color: '#9ca3af', marginTop: 1 }}>
+                        Emitida {formatFechaES(f.fecha_emision)}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.tdBase}>
+                    {(f.tipo === 'pago_diana' || f.tipo === 'pago_socio') ? '' : formatEUR(f.base_imponible || 0)}
                   </Text>
-                  {f.notas ? (
-                    <Text style={{ fontSize: 8, color: SLATE_DIM, fontStyle: 'italic', marginTop: 1 }}>
-                      {f.notas}
-                    </Text>
-                  ) : null}
-                  {f.tipo === 'venta' && f.realizado && f.fecha_emision && f.fecha_emision !== f.fecha ? (
-                    <Text style={{ fontSize: 7.5, color: '#9ca3af', marginTop: 1 }}>
-                      Emitida {formatFechaES(f.fecha_emision)}
-                    </Text>
-                  ) : null}
+                  <Text style={[styles.tdDiana, {
+                    color: imp >= 0 ? EMERALD : RED,
+                  }]}>
+                    {formatEUR(imp)}
+                  </Text>
+                  <View style={styles.tdEstado}><EstadoBadge fila={f} /></View>
                 </View>
-                <Text style={styles.tdBase}>
-                  {f.tipo === 'pago_diana' ? '' : formatEUR(f.base_imponible || 0)}
-                </Text>
-                <Text style={[styles.tdDiana, {
-                  color: (f.diana_importe || 0) >= 0 ? EMERALD : RED,
-                }]}>
-                  {formatEUR(f.diana_importe || 0)}
-                </Text>
-                <View style={styles.tdEstado}><EstadoBadge fila={f} /></View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
-        {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text>Cuenta interna de Diana — Vista interna, NO fiscal.</Text>
+          <Text>Cuenta interna de {socioNombre} — Vista interna, NO fiscal.</Text>
           <Text>Generado: {fechaGen}</Text>
         </View>
       </Page>

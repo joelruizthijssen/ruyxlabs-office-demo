@@ -1,18 +1,18 @@
-// Pagina "Cuenta interna de Diana" (socio). NO es un documento fiscal —
-// es una cuenta corriente para liquidar la comision mensual de un socio
-// sobre las facturas y gastos marcados con `diana_pct` por linea.
+// Pagina "Cuenta de socio interno". NO es un documento fiscal — es una
+// cuenta corriente para liquidar la comision mensual de un socio sobre las
+// facturas y gastos marcados con % por socio (linea_factura_socio /
+// gasto_linea_socio) y los pagos/ajustes/cierres registrados aqui.
 //
-// Modelo:
-//   - Cada linea de factura/gasto puede llevar diana_pct (0/50/100) en su
-//     base imponible. La pagina suma esos importes y calcula el saldo.
-//   - Los pagos a Diana se registran aqui (tabla pagos_diana) para cuadrar
-//     el saldo cuando ella factura un importe parcial cada mes.
-//   - El saldo del mes anterior se arrastra al actual automaticamente.
+// v1.5.0: la pagina esta parametrizada por socio_id. Si la empresa tiene 1
+// solo socio, se usa automaticamente. Si tiene 2+, un selector arriba
+// permite alternar. Si tiene 0, se muestra empty state con link a Ajustes.
+// El fichero mantiene el nombre "CuentaDiana.jsx" para no romper la ruta
+// existente, pero el componente exportado es socio-agnostico.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Trash2, ChevronLeft, ChevronRight, Calendar, Save, Pencil,
-  FileDown, ArrowLeftRight, Lock,
+  FileDown, ArrowLeftRight, Lock, User,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { formatEUR, formatFechaES } from '../utils/format.js';
@@ -33,18 +33,26 @@ function ymd(d) {
 function CuentaDiana() {
   const toast = useToast();
   const now = new Date();
+
+  // v1.5.0: lista de socios activos de la empresa + socio seleccionado.
+  const [socios, setSocios] = useState([]);
+  const [selectedSocioId, setSelectedSocioId] = useState(null);
+  const socioActivo = useMemo(
+    () => socios.find((s) => s.id === selectedSocioId) || socios[0] || null,
+    [socios, selectedSocioId],
+  );
+  const socioNombre = socioActivo?.nombre || 'socio';
+
   const [anio, setAnio] = useState(now.getFullYear());
-  const [mes, setMes] = useState(now.getMonth()); // 0-11
+  const [mes, setMes] = useState(now.getMonth());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Modo: 'mes' (default) o 'custom' (rango libre con date pickers).
   const [modo, setModo] = useState('mes');
   const [customDesde, setCustomDesde] = useState(ymd(new Date(now.getFullYear(), now.getMonth(), 1)));
   const [customHasta, setCustomHasta] = useState(ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
 
-  // Form para registrar nuevo pago a Diana.
   const [pagoForm, setPagoForm] = useState({
     fecha: ymd(now),
     importe: '',
@@ -52,37 +60,25 @@ function CuentaDiana() {
   });
   const [pagoSaving, setPagoSaving] = useState(false);
 
-  // Saldo inicial manual de la empresa activa (heredado de Excel viejo).
-  const [saldoInicial, setSaldoInicial] = useState(0);
   const [editandoSaldo, setEditandoSaldo] = useState(false);
   const [saldoInicialDraft, setSaldoInicialDraft] = useState('');
 
-  // Export PDF
   const [exportando, setExportando] = useState(false);
-
-  // Modal listado de facturas pendientes de cobro (click en card "Ventas pendientes").
   const [pendientesOpen, setPendientesOpen] = useState(false);
-
-  // Modal listado generico para ventas cobradas / gastos compartidos / pagos Diana.
-  // tipo: null | 'ventas_cobradas' | 'gastos' | 'pagos'.
   const [listadoTipo, setListadoTipo] = useState(null);
-  // Modal breakdown del saldo del periodo (click en card SALDO DEL PERIODO).
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
-  // Cierres de periodo (v1.2.23). Solo guardamos ultimo cierre como marker
-  // visual + un mini modal para crear nuevos.
   const [ultimoCierre, setUltimoCierre] = useState(null);
   const [cerrarOpen, setCerrarOpen] = useState(false);
   const [cerrarForm, setCerrarForm] = useState({ fecha: ymd(now), notas: '' });
   const [cerrarSaving, setCerrarSaving] = useState(false);
 
-  // Modal de movimiento interno (solo build family).
   const [movModalOpen, setMovModalOpen] = useState(false);
   const [movForm, setMovForm] = useState({
     fecha: ymd(now),
     concepto: '',
     importe: '',
-    quien: 'D',
+    quien: 'S',
   });
   const [movSaving, setMovSaving] = useState(false);
 
@@ -96,12 +92,33 @@ function CuentaDiana() {
     return `${anio}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   }, [modo, customHasta, anio, mes]);
 
+  const saldoInicial = Number(socioActivo?.saldo_inicial) || 0;
+
+  // Carga la lista de socios de la empresa activa.
+  const cargarSocios = useCallback(async () => {
+    if (!window.api?.socios) return;
+    try {
+      const rows = await window.api.socios.list();
+      const list = Array.isArray(rows) ? rows : [];
+      setSocios(list);
+      // Al cambiar la lista, si el selected no existe, elegimos el primero.
+      setSelectedSocioId((prev) => {
+        if (prev != null && list.some((s) => s.id === prev)) return prev;
+        return list[0]?.id ?? null;
+      });
+    } catch { /* noop */ }
+  }, []);
+
   const cargar = useCallback(async () => {
-    if (!window.api?.informes?.diana) return;
+    if (!window.api?.informes?.socio || !selectedSocioId) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const r = await window.api.informes.diana({ desde, hasta });
+      const r = await window.api.informes.socio({ socio_id: selectedSocioId, desde, hasta });
       if (r?.error) setError(r.error);
       else setData(r);
     } catch (e) {
@@ -109,48 +126,44 @@ function CuentaDiana() {
     } finally {
       setLoading(false);
     }
-  }, [desde, hasta]);
+  }, [desde, hasta, selectedSocioId]);
 
-  useEffect(() => {
-    cargar();
-  }, [cargar]);
+  useEffect(() => { cargarSocios(); }, [cargarSocios]);
+  useEffect(() => { cargar(); }, [cargar]);
 
-  // Cargar saldo inicial al montar y al cambiar empresa.
-  const cargarSaldoInicial = useCallback(async () => {
-    if (!window.api?.diana?.saldoInicialGet) return;
-    try {
-      const res = await window.api.diana.saldoInicialGet();
-      if (res?.error) return;
-      setSaldoInicial(Number(res?.valor) || 0);
-    } catch { /* noop */ }
-  }, []);
   const cargarUltimoCierre = useCallback(async () => {
-    if (!window.api?.diana?.cierresUltimo) return;
-    try {
-      const c = await window.api.diana.cierresUltimo();
-      setUltimoCierre(c && !c.error ? c : null);
-    } catch { /* noop */ }
-  }, []);
-  useEffect(() => {
-    cargarSaldoInicial();
-    cargarUltimoCierre();
-    const onEmpresaChange = () => { cargarSaldoInicial(); cargarUltimoCierre(); cargar(); };
-    window.addEventListener('empresa-changed', onEmpresaChange);
-    return () => window.removeEventListener('empresa-changed', onEmpresaChange);
-  }, [cargarSaldoInicial, cargarUltimoCierre, cargar]);
-
-  async function guardarSaldoInicial() {
-    const v = Number(saldoInicialDraft);
-    if (!Number.isFinite(v)) {
-      toast.error('Importe inválido');
+    if (!window.api?.socioCierres?.ultimo || !selectedSocioId) {
+      setUltimoCierre(null);
       return;
     }
     try {
-      const res = await window.api.diana.saldoInicialSet(v);
+      const c = await window.api.socioCierres.ultimo(selectedSocioId);
+      setUltimoCierre(c && !c.error ? c : null);
+    } catch { /* noop */ }
+  }, [selectedSocioId]);
+  useEffect(() => { cargarUltimoCierre(); }, [cargarUltimoCierre]);
+
+  useEffect(() => {
+    const onEmpresaChange = () => { cargarSocios(); cargar(); cargarUltimoCierre(); };
+    const onSociosChange = () => { cargarSocios(); };
+    window.addEventListener('empresa-changed', onEmpresaChange);
+    window.addEventListener('socios-changed', onSociosChange);
+    return () => {
+      window.removeEventListener('empresa-changed', onEmpresaChange);
+      window.removeEventListener('socios-changed', onSociosChange);
+    };
+  }, [cargarSocios, cargar, cargarUltimoCierre]);
+
+  async function guardarSaldoInicial() {
+    const v = Number(saldoInicialDraft);
+    if (!Number.isFinite(v)) { toast.error('Importe inválido'); return; }
+    if (!selectedSocioId) { toast.error('Selecciona un socio'); return; }
+    try {
+      const res = await window.api.socios.update(selectedSocioId, { saldo_inicial: v });
       if (res?.error) { toast.error(res.error); return; }
-      setSaldoInicial(Number(res?.valor) || 0);
       setEditandoSaldo(false);
       toast.success('Saldo inicial actualizado');
+      await cargarSocios();
       cargar();
     } catch (e) {
       toast.error(e.message ?? String(e));
@@ -170,15 +183,17 @@ function CuentaDiana() {
     const importe = Number(pagoForm.importe);
     if (!pagoForm.fecha) { toast.error('Fecha obligatoria'); return; }
     if (!importe || importe <= 0) { toast.error('Importe debe ser mayor que 0'); return; }
+    if (!selectedSocioId) { toast.error('Selecciona un socio'); return; }
     setPagoSaving(true);
     try {
-      const res = await window.api.pagosDiana.create({
+      const res = await window.api.pagosSocio.create({
+        socio_id: selectedSocioId,
         fecha: pagoForm.fecha,
         importe,
         notas: pagoForm.notas || null,
       });
       if (res?.error) { toast.error(res.error); return; }
-      toast.success('Pago a Diana registrado');
+      toast.success(`Pago a ${socioNombre} registrado`);
       setPagoForm({ fecha: ymd(new Date()), importe: '', notas: '' });
       cargar();
     } catch (e) {
@@ -192,7 +207,6 @@ function CuentaDiana() {
     if (!data) { toast.error('Esperando carga de datos…'); return; }
     setExportando(true);
     try {
-      // Necesitamos el nombre/NIF de la empresa activa para la cabecera.
       let empresa = {};
       try {
         const s = await window.api.settings.get();
@@ -201,13 +215,16 @@ function CuentaDiana() {
         }
       } catch { /* noop */ }
       const blob = await pdf(
-        <CuentaDianaPDF informe={data} meta={{ empresa, saldoInicial }} />,
+        <CuentaDianaPDF
+          informe={data}
+          meta={{ empresa, saldoInicial, socioNombre }}
+        />,
       ).toBlob();
       const buf = new Uint8Array(await blob.arrayBuffer());
       const label = modo === 'custom'
         ? `${desde}_a_${hasta}`
         : `${MESES[mes]}_${anio}`;
-      const sugName = `Cuenta_Diana_${label}.pdf`;
+      const sugName = `Cuenta_${socioNombre}_${label}.pdf`;
       const res = await window.api.pdf.saveInforme(sugName, buf);
       if (res?.canceled) return;
       if (res?.error) { toast.error(res.error); return; }
@@ -220,9 +237,9 @@ function CuentaDiana() {
   }
 
   async function eliminarPago(pagoId) {
-    if (!confirm('¿Eliminar este pago a Diana?')) return;
+    if (!confirm(`¿Eliminar este pago a ${socioNombre}?`)) return;
     try {
-      const res = await window.api.pagosDiana.delete(pagoId);
+      const res = await window.api.pagosSocio.delete(pagoId);
       if (res?.error) toast.error(res.error);
       else cargar();
     } catch (e) {
@@ -235,7 +252,7 @@ function CuentaDiana() {
       fecha: ymd(new Date()),
       concepto: '',
       importe: '',
-      quien: 'D',
+      quien: 'S',
     });
     setMovModalOpen(true);
   }
@@ -245,9 +262,11 @@ function CuentaDiana() {
     if (!movForm.fecha) { toast.error('Fecha obligatoria'); return; }
     if (!importe || importe <= 0) { toast.error('Importe debe ser mayor que 0'); return; }
     if (!movForm.concepto.trim()) { toast.error('Indica un concepto'); return; }
+    if (!selectedSocioId) { toast.error('Selecciona un socio'); return; }
     setMovSaving(true);
     try {
-      const res = await window.api.diana.ajustesCreate({
+      const res = await window.api.socioAjustes.create({
+        socio_id: selectedSocioId,
         fecha: movForm.fecha,
         concepto: movForm.concepto.trim(),
         importe,
@@ -267,7 +286,7 @@ function CuentaDiana() {
   async function eliminarMovimiento(movId) {
     if (!confirm('¿Eliminar este movimiento interno?')) return;
     try {
-      const res = await window.api.diana.ajustesDelete(movId);
+      const res = await window.api.socioAjustes.delete(movId);
       if (res?.error) toast.error(res.error);
       else cargar();
     } catch (e) {
@@ -282,9 +301,11 @@ function CuentaDiana() {
 
   async function guardarCierre() {
     if (!cerrarForm.fecha) { toast.error('Fecha obligatoria'); return; }
+    if (!selectedSocioId) { toast.error('Selecciona un socio'); return; }
     setCerrarSaving(true);
     try {
-      const res = await window.api.diana.cierresCreate({
+      const res = await window.api.socioCierres.create({
+        socio_id: selectedSocioId,
         fecha: cerrarForm.fecha,
         notas: cerrarForm.notas || null,
       });
@@ -300,8 +321,6 @@ function CuentaDiana() {
     }
   }
 
-  // Genera el PDF de una sublista de Cuenta Diana (ventas cobradas, gastos
-  // compartidos o pagos Diana). `cfg` define titulo + columnas + filas + total.
   async function exportarSublistaPdf(cfg) {
     try {
       let empresa = {};
@@ -339,7 +358,7 @@ function CuentaDiana() {
     if (!ultimoCierre) return;
     if (!confirm(`¿Eliminar el cierre del ${formatFechaES(ultimoCierre.fecha)}?`)) return;
     try {
-      const res = await window.api.diana.cierresDelete(ultimoCierre.id);
+      const res = await window.api.socioCierres.delete(ultimoCierre.id);
       if (res?.error) toast.error(res.error);
       else {
         toast.success('Cierre eliminado');
@@ -351,6 +370,34 @@ function CuentaDiana() {
     }
   }
 
+  // Empty state: no hay socios en la empresa activa. Ofrecemos ir a Ajustes.
+  if (socios.length === 0) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div className="bg-white border border-slate-200 rounded-lg p-8 text-center">
+          <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+            <User size={28} className="text-slate-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-800 mb-2">
+            Todavía no hay socios en esta empresa
+          </h2>
+          <p className="text-sm text-slate-600 max-w-md mx-auto mb-4">
+            Los socios internos son colaboradores con los que compartes un %
+            de la base imponible de tus facturas y gastos (cuenta interna, no
+            fiscal). Si tienes uno, añádelo en Ajustes para activar esta
+            página.
+          </p>
+          <a
+            href="#/ajustes"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand text-white hover:bg-brand-dark text-sm"
+          >
+            Ir a Ajustes › Socios internos
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const filas = data?.filas || [];
   const totales = data?.totales || {};
 
@@ -360,18 +407,37 @@ function CuentaDiana() {
         <div className="p-2 rounded-lg bg-fuchsia-100 text-fuchsia-700">
           <Calculator size={22} />
         </div>
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Cuenta interna de Diana</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-semibold text-slate-800">
+            Cuenta interna de {socioNombre}
+          </h1>
           <p className="text-sm text-slate-500">
-            Liquidación de la comisión. Cuentan aquí las líneas marcadas con
-            "D 50% / 100%" (Ellen paga, Diana le debe → resta saldo) o "E 50% / 100%"
-            (Diana paga, Ellen le debe → suma saldo). Vista interna, NO fiscal.
+            Liquidación de la comisión. Cuentan aquí las líneas de facturas y
+            gastos marcadas con % para {socioNombre}. Vista interna, NO fiscal.
           </p>
         </div>
       </div>
 
-      {/* Selector de periodo: mes natural (default) o rango personalizado */}
-      <div className="flex flex-wrap items-center gap-3 mb-5 mt-5">
+      {/* Selector de socio: solo aparece si hay 2+ socios en la empresa. */}
+      {socios.length > 1 && (
+        <div className="flex items-center gap-2 mb-4">
+          <label className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+            Ver cuenta de:
+          </label>
+          <select
+            className="px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-sm font-semibold text-slate-800"
+            value={selectedSocioId || ''}
+            onChange={(e) => setSelectedSocioId(Number(e.target.value) || null)}
+          >
+            {socios.map((s) => (
+              <option key={s.id} value={s.id}>{s.nombre}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Selector de periodo */}
+      <div className="flex flex-wrap items-center gap-3 mb-5 mt-2">
         {modo === 'mes' ? (
           <>
             <button
@@ -433,7 +499,7 @@ function CuentaDiana() {
             type="button"
             onClick={abrirCerrarPeriodo}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm"
-            title="Marca este periodo como cerrado (guarda fecha y saldo). El proximo periodo arranca al dia siguiente."
+            title="Marca este periodo como cerrado (guarda fecha y saldo). El próximo periodo arranca al día siguiente."
           >
             <Lock size={14} /> Cerrar periodo
           </button>
@@ -442,7 +508,7 @@ function CuentaDiana() {
               type="button"
               onClick={abrirNuevoMovimiento}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm"
-              title="Apuntar consumo de stock compartido por Diana o Ellen"
+              title={`Apuntar consumo de stock compartido por ${socioNombre} o ti`}
             >
               <ArrowLeftRight size={14} /> Nuevo movimiento
             </button>
@@ -470,7 +536,7 @@ function CuentaDiana() {
         <div className="mb-4 px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-sm flex items-center gap-3">
           <Lock size={14} className="text-slate-500 shrink-0" />
           <div className="flex-1">
-            <span className="font-semibold">Ultimo cierre:</span>{' '}
+            <span className="font-semibold">Último cierre:</span>{' '}
             {formatFechaES(ultimoCierre.fecha)} ·{' '}
             <span className="text-slate-600">Saldo al cierre: <strong>{formatEUR(ultimoCierre.saldo_al_cierre)}</strong></span>
             {ultimoCierre.notas && <span className="text-slate-500 italic ml-2">"{ultimoCierre.notas}"</span>}
@@ -486,8 +552,6 @@ function CuentaDiana() {
         </div>
       )}
 
-      {/* Banner: ventas pendientes (no entran en el saldo hasta cobrarlas).
-          Click → modal con listado de facturas pendientes. */}
       {(data?.totales?.ventas_pendiente || 0) > 0 && (
         <button
           type="button"
@@ -503,18 +567,17 @@ function CuentaDiana() {
             </div>
             <div className="text-xs mt-0.5">
               Click para ver el listado · Estos importes se sumarán al saldo
-              de Diana cuando marques las facturas como <strong>cobradas</strong>.
+              de {socioNombre} cuando marques las facturas como <strong>cobradas</strong>.
             </div>
           </div>
         </button>
       )}
 
-      {/* Resumen — totales del mes */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <Card
           label="Ventas (cobradas)"
           value={totales.ventas_realizado}
-          subtitle="Ya cobrado este mes (click para listado)"
+          subtitle="Ya cobrado este periodo (click para listado)"
           tone="emerald"
           onClick={() => setListadoTipo('ventas_cobradas')}
         />
@@ -528,12 +591,12 @@ function CuentaDiana() {
         <Card
           label="Gastos compartidos"
           value={totales.compras_realizado}
-          subtitle="D resta · E suma (click para listado)"
+          subtitle="Impacto sobre el saldo (click para listado)"
           tone="red"
           onClick={() => setListadoTipo('gastos')}
         />
         <Card
-          label="Pagos a Diana"
+          label={`Pagos a ${socioNombre}`}
           value={-(totales.pagos_realizados || 0)}
           subtitle="Lo que ya le has pagado (click para listado)"
           tone="violet"
@@ -558,22 +621,22 @@ function CuentaDiana() {
         <Card
           label="SALDO ACTUAL"
           value={totales.saldo_final}
-          subtitle="Positivo = le debes a Diana"
+          subtitle={`Positivo = le debes a ${socioNombre}`}
           tone="brand"
           big
         />
       </div>
 
-      {/* Saldo inicial manual — editable. Heredado del Excel viejo. */}
+      {/* Saldo inicial manual — editable, guardado en empresa_socios.saldo_inicial. */}
       <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6 flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-slate-500 font-medium">
             Saldo inicial heredado (ajuste manual)
           </div>
           <p className="text-[12px] text-slate-500 mt-0.5 max-w-xl">
-            Importe que Ellen le debía a Diana antes de empezar a usar la app
-            (por ejemplo, deuda heredada del Excel viejo). Se suma al saldo
-            arrastrado en todos los periodos. Positivo = Ellen debe a Diana.
+            Importe que le debías a {socioNombre} antes de empezar a usar la
+            app (por ejemplo, deuda heredada del Excel viejo). Se suma al
+            saldo arrastrado en todos los periodos.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -630,7 +693,7 @@ function CuentaDiana() {
       {/* Detalle de movimientos */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
         <div className="px-4 py-3 border-b border-slate-200 text-sm font-semibold text-slate-700 uppercase tracking-wide">
-          Movimientos del mes
+          Movimientos del periodo
         </div>
         <table className="w-full text-sm">
           <thead>
@@ -639,7 +702,7 @@ function CuentaDiana() {
               <th className="px-4 py-2 font-medium">Tipo</th>
               <th className="px-4 py-2 font-medium">Concepto</th>
               <th className="px-4 py-2 font-medium text-right">Base</th>
-              <th className="px-4 py-2 font-medium text-right">Diana</th>
+              <th className="px-4 py-2 font-medium text-right">{socioNombre}</th>
               <th className="px-4 py-2 font-medium">Estado</th>
               <th className="px-4 py-2 w-8" />
             </tr>
@@ -648,13 +711,13 @@ function CuentaDiana() {
             {loading ? (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Cargando…</td></tr>
             ) : filas.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No hay movimientos de Diana este mes.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No hay movimientos de {socioNombre} este periodo.</td></tr>
             ) : (
               filas.map((f, idx) => (
                 <tr key={`${f.tipo}-${f.ref_id}-${idx}`} className="border-t border-slate-100">
                   <td className="px-4 py-2 text-slate-700">{formatFechaES(f.fecha)}</td>
                   <td className="px-4 py-2">
-                    <TipoBadge tipo={f.tipo} />
+                    <TipoBadge tipo={f.tipo} socioNombre={socioNombre} />
                   </td>
                   <td className="px-4 py-2 text-slate-800">
                     <div>
@@ -673,13 +736,13 @@ function CuentaDiana() {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600">
-                    {f.tipo === 'pago_diana' ? '' : formatEUR(f.base_imponible || 0)}
+                    {f.tipo === 'pago_socio' ? '' : formatEUR(f.base_imponible || 0)}
                   </td>
                   <td className={
                     'px-4 py-2 text-right tabular-nums font-semibold ' +
-                    ((f.diana_importe || 0) >= 0 ? 'text-emerald-700' : 'text-red-600')
+                    ((f.socio_importe || 0) >= 0 ? 'text-emerald-700' : 'text-red-600')
                   }>
-                    {formatEUR(f.diana_importe || 0)}
+                    {formatEUR(f.socio_importe || 0)}
                   </td>
                   <td className="px-4 py-2">
                     {f.tipo === 'venta' && (
@@ -689,7 +752,7 @@ function CuentaDiana() {
                     )}
                   </td>
                   <td className="px-2 py-2 text-right">
-                    {f.tipo === 'pago_diana' && (
+                    {f.tipo === 'pago_socio' && (
                       <button
                         onClick={() => eliminarPago(f.pago_id)}
                         className="p-1 rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -715,15 +778,16 @@ function CuentaDiana() {
         </table>
       </div>
 
-      {/* Form: registrar pago a Diana */}
+      {/* Form: registrar pago al socio */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">
-          Registrar pago a Diana
+          Registrar pago a {socioNombre}
         </h3>
         <p className="text-xs text-slate-500 mb-3">
-          Cuando le pagas a Diana (en efectivo, transferencia, etc.) regístralo aquí
-          para que se descuente del saldo. Si Diana te emite una factura, recuérdate de
-          crearla aparte en Gastos (con proveedor = Diana) — eso es fiscal y vive aparte.
+          Cuando le pagas a {socioNombre} (en efectivo, transferencia, etc.)
+          regístralo aquí para que se descuente del saldo. Si {socioNombre} te
+          emite una factura, recuérdate de crearla aparte en Gastos (con
+          proveedor = {socioNombre}) — eso es fiscal y vive aparte.
         </p>
         <div className="grid grid-cols-[140px_140px_1fr_auto] gap-2 items-end">
           <div>
@@ -773,6 +837,7 @@ function CuentaDiana() {
           form={movForm}
           setForm={setMovForm}
           saving={movSaving}
+          socioNombre={socioNombre}
           onSave={guardarMovimiento}
           onClose={() => setMovModalOpen(false)}
         />
@@ -781,6 +846,7 @@ function CuentaDiana() {
       {pendientesOpen && (
         <PendientesModal
           pendientes={data?.pendientes || []}
+          socioNombre={socioNombre}
           onClose={() => setPendientesOpen(false)}
           onOpenFactura={(id) => {
             setPendientesOpen(false);
@@ -794,6 +860,7 @@ function CuentaDiana() {
           form={cerrarForm}
           setForm={setCerrarForm}
           saving={cerrarSaving}
+          socioNombre={socioNombre}
           onSave={guardarCierre}
           onClose={() => setCerrarOpen(false)}
         />
@@ -803,6 +870,7 @@ function CuentaDiana() {
         <SublistaModal
           tipo={listadoTipo}
           filas={data?.filas || []}
+          socioNombre={socioNombre}
           onClose={() => setListadoTipo(null)}
           onExportPdf={exportarSublistaPdf}
         />
@@ -811,6 +879,7 @@ function CuentaDiana() {
       {breakdownOpen && (
         <SaldoBreakdownModal
           totales={data?.totales || {}}
+          socioNombre={socioNombre}
           onClose={() => setBreakdownOpen(false)}
         />
       )}
@@ -818,51 +887,48 @@ function CuentaDiana() {
   );
 }
 
-// Modal generico para los 3 listados (ventas cobradas, gastos compartidos,
-// pagos a Diana). Boton 'Guardar PDF' arriba a la derecha.
-function SublistaModal({ tipo, filas, onClose, onExportPdf }) {
+function SublistaModal({ tipo, filas, socioNombre, onClose, onExportPdf }) {
   const cfg = (() => {
     if (tipo === 'ventas_cobradas') {
       const items = filas.filter((f) => f.tipo === 'venta' && f.realizado);
-      const total = items.reduce((s, f) => s + (Number(f.diana_importe) || 0), 0);
+      const total = items.reduce((s, f) => s + (Number(f.socio_importe) || 0), 0);
       return {
         titulo: 'Ventas (cobradas)',
-        slug: 'Ventas_cobradas_Diana',
+        slug: `Ventas_cobradas_${socioNombre}`,
         items,
         total,
-        totalLabel: 'Cuota Diana total',
+        totalLabel: `Cuota ${socioNombre} total`,
         columnas: [
           { key: 'fecha', label: 'Fecha', width: 70, format: 'fecha' },
           { key: 'ref_numero', label: 'Nº', width: 80 },
           { key: 'concepto', label: 'Cliente' },
           { key: 'base_imponible', label: 'Base', width: 70, align: 'right', format: 'eur' },
-          { key: 'diana_importe', label: 'Cuota Diana', width: 80, align: 'right', format: 'eur' },
+          { key: 'socio_importe', label: `Cuota ${socioNombre}`, width: 80, align: 'right', format: 'eur' },
         ],
       };
     }
     if (tipo === 'gastos') {
       const items = filas.filter((f) => f.tipo === 'gasto');
-      const total = items.reduce((s, f) => s + (Number(f.diana_importe) || 0), 0);
+      const total = items.reduce((s, f) => s + (Number(f.socio_importe) || 0), 0);
       return {
         titulo: 'Gastos compartidos',
-        slug: 'Gastos_compartidos_Diana',
+        slug: `Gastos_compartidos_${socioNombre}`,
         items,
         total,
-        totalLabel: 'Total al saldo Diana',
+        totalLabel: `Total al saldo ${socioNombre}`,
         columnas: [
           { key: 'fecha', label: 'Fecha', width: 70, format: 'fecha' },
           { key: 'concepto', label: 'Proveedor' },
           { key: 'base_imponible', label: 'Base', width: 70, align: 'right', format: 'eur' },
-          { key: 'diana_importe', label: 'Impacto saldo', width: 90, align: 'right', format: 'eur' },
+          { key: 'socio_importe', label: 'Impacto saldo', width: 90, align: 'right', format: 'eur' },
         ],
       };
     }
-    // pagos
-    const items = filas.filter((f) => f.tipo === 'pago_diana');
-    const total = items.reduce((s, f) => s + Math.abs(Number(f.diana_importe) || 0), 0);
+    const items = filas.filter((f) => f.tipo === 'pago_socio');
+    const total = items.reduce((s, f) => s + Math.abs(Number(f.socio_importe) || 0), 0);
     return {
-      titulo: 'Pagos a Diana',
-      slug: 'Pagos_a_Diana',
+      titulo: `Pagos a ${socioNombre}`,
+      slug: `Pagos_a_${socioNombre}`,
       items,
       total,
       totalLabel: 'Total pagado',
@@ -873,9 +939,8 @@ function SublistaModal({ tipo, filas, onClose, onExportPdf }) {
       ],
     };
   })();
-  // Para "pagos" el importe está en negativo internamente; lo presentamos en positivo.
   const itemsConImporteAbs = tipo === 'pagos'
-    ? cfg.items.map((f) => ({ ...f, importeAbs: Math.abs(Number(f.diana_importe) || 0) }))
+    ? cfg.items.map((f) => ({ ...f, importeAbs: Math.abs(Number(f.socio_importe) || 0) }))
     : cfg.items;
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -954,7 +1019,7 @@ function SublistaModal({ tipo, filas, onClose, onExportPdf }) {
                           className={
                             'px-4 py-2 ' +
                             (c.align === 'right' ? 'text-right tabular-nums' : 'text-slate-700') +
-                            (c.key === 'diana_importe' ? ' font-semibold' : '')
+                            (c.key === 'socio_importe' ? ' font-semibold' : '')
                           }
                         >
                           {text}
@@ -972,11 +1037,10 @@ function SublistaModal({ tipo, filas, onClose, onExportPdf }) {
   );
 }
 
-// Modal que explica como se llega al saldo del periodo, desglosado por bucket.
-function SaldoBreakdownModal({ totales, onClose }) {
+function SaldoBreakdownModal({ totales, socioNombre, onClose }) {
   const ventasR = Number(totales.ventas_realizado) || 0;
-  const compras = Number(totales.compras_realizado) || 0; // ya negativo
-  const ajustes = Number(totales.ajustes_realizados) || 0; // signed
+  const compras = Number(totales.compras_realizado) || 0;
+  const ajustes = Number(totales.ajustes_realizados) || 0;
   const pagos = Number(totales.pagos_realizados) || 0;
   const saldo = Number(totales.saldo_periodo) || 0;
   return (
@@ -989,7 +1053,7 @@ function SaldoBreakdownModal({ totales, onClose }) {
           <div>
             <h3 className="text-base font-semibold text-slate-800">Desglose del saldo del periodo</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Como se calcula el saldo del periodo a partir de los movimientos.
+              Cómo se calcula el saldo del periodo a partir de los movimientos.
             </p>
           </div>
           <button
@@ -999,12 +1063,12 @@ function SaldoBreakdownModal({ totales, onClose }) {
           >✕</button>
         </div>
         <div className="p-5 space-y-2 text-sm">
-          <DesgloseRow label="Ventas cobradas" value={ventasR} hint="Cuota Diana de facturas cobradas" />
-          <DesgloseRow label="Gastos compartidos" value={compras} hint="Convención: D suma negativo, E suma positivo" />
+          <DesgloseRow label="Ventas cobradas" value={ventasR} hint={`Cuota ${socioNombre} de facturas cobradas`} />
+          <DesgloseRow label="Gastos compartidos" value={compras} hint="Impacto neto sobre el saldo" />
           {ajustes !== 0 && (
-            <DesgloseRow label="Movimientos internos" value={ajustes} hint="Stock compartido (D resta, E suma)" />
+            <DesgloseRow label="Movimientos internos" value={ajustes} hint="Consumos de stock compartido" />
           )}
-          <DesgloseRow label="Pagos a Diana" value={-pagos} hint="Lo que ya le has pagado este periodo" />
+          <DesgloseRow label={`Pagos a ${socioNombre}`} value={-pagos} hint="Lo que ya le has pagado este periodo" />
           <div className="border-t border-slate-300 pt-3 mt-3 flex items-center justify-between">
             <span className="font-semibold text-slate-800">SALDO DEL PERIODO</span>
             <span className={'text-xl font-bold tabular-nums ' + (saldo >= 0 ? 'text-emerald-700' : 'text-red-600')}>
@@ -1034,7 +1098,7 @@ function DesgloseRow({ label, value, hint }) {
   );
 }
 
-function CerrarPeriodoModal({ form, setForm, saving, onSave, onClose }) {
+function CerrarPeriodoModal({ form, setForm, saving, socioNombre, onSave, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -1044,9 +1108,10 @@ function CerrarPeriodoModal({ form, setForm, saving, onSave, onClose }) {
         <div className="px-5 py-4 border-b border-slate-200">
           <h3 className="text-base font-semibold text-slate-800">Cerrar periodo</h3>
           <p className="text-xs text-slate-500 mt-1">
-            Guardamos la fecha y el saldo a esa fecha. El proximo periodo arranca
-            al dia siguiente. No bloquea nada: si editas facturas/gastos del
-            periodo cerrado, el saldo se recalcula como siempre.
+            Guardamos la fecha y el saldo a esa fecha para {socioNombre}. El
+            próximo periodo arranca al día siguiente. No bloquea nada: si
+            editas facturas/gastos del periodo cerrado, el saldo se recalcula
+            como siempre.
           </p>
         </div>
         <div className="p-5 space-y-3">
@@ -1065,7 +1130,7 @@ function CerrarPeriodoModal({ form, setForm, saving, onSave, onClose }) {
             <input
               className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               value={form.notas}
-              placeholder="Ej: Pagado a Diana en efectivo"
+              placeholder={`Ej: Pagado a ${socioNombre} en efectivo`}
               onChange={(e) => setForm({ ...form, notas: e.target.value })}
             />
           </div>
@@ -1092,8 +1157,8 @@ function CerrarPeriodoModal({ form, setForm, saving, onSave, onClose }) {
   );
 }
 
-function PendientesModal({ pendientes, onClose, onOpenFactura }) {
-  const total = pendientes.reduce((s, p) => s + (Number(p.diana_importe) || 0), 0);
+function PendientesModal({ pendientes, socioNombre, onClose, onOpenFactura }) {
+  const total = pendientes.reduce((s, p) => s + (Number(p.socio_importe) || 0), 0);
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -1106,7 +1171,7 @@ function PendientesModal({ pendientes, onClose, onOpenFactura }) {
               Facturas pendientes de cobro
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              {pendientes.length} facturas · Total a Diana cuando se cobren: <strong>{formatEUR(total)}</strong>
+              {pendientes.length} facturas · Total a {socioNombre} cuando se cobren: <strong>{formatEUR(total)}</strong>
             </p>
           </div>
           <button
@@ -1118,7 +1183,7 @@ function PendientesModal({ pendientes, onClose, onOpenFactura }) {
         <div className="overflow-auto flex-1">
           {pendientes.length === 0 ? (
             <p className="px-5 py-8 text-sm text-slate-500 text-center">
-              No hay facturas pendientes de cobro con cuota Diana.
+              No hay facturas pendientes de cobro con cuota para {socioNombre}.
             </p>
           ) : (
             <table className="w-full text-sm">
@@ -1129,7 +1194,7 @@ function PendientesModal({ pendientes, onClose, onOpenFactura }) {
                   <th className="px-4 py-2 font-medium">Cliente</th>
                   <th className="px-4 py-2 font-medium text-right">Base</th>
                   <th className="px-4 py-2 font-medium text-right">Cobrado</th>
-                  <th className="px-4 py-2 font-medium text-right">Cuota Diana</th>
+                  <th className="px-4 py-2 font-medium text-right">Cuota {socioNombre}</th>
                   <th className="px-4 py-2"></th>
                 </tr>
               </thead>
@@ -1148,7 +1213,7 @@ function PendientesModal({ pendientes, onClose, onOpenFactura }) {
                       {formatEUR(p.cobrado || 0)}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums font-semibold text-emerald-700">
-                      {formatEUR(p.diana_importe)}
+                      {formatEUR(p.socio_importe)}
                     </td>
                     <td className="px-2 py-2">
                       <button
@@ -1170,8 +1235,8 @@ function PendientesModal({ pendientes, onClose, onOpenFactura }) {
   );
 }
 
-function MovimientoModal({ form, setForm, saving, onSave, onClose }) {
-  const esDiana = form.quien === 'D';
+function MovimientoModal({ form, setForm, saving, socioNombre, onSave, onClose }) {
+  const esSocio = form.quien === 'S';
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -1181,8 +1246,8 @@ function MovimientoModal({ form, setForm, saving, onSave, onClose }) {
         <div className="px-5 py-4 border-b border-slate-200">
           <h3 className="text-base font-semibold text-slate-800">Nuevo movimiento interno</h3>
           <p className="text-xs text-slate-500 mt-1">
-            Consumo de stock compartido sin factura ni gasto. Ajusta el saldo de Diana
-            directamente.
+            Consumo de stock compartido sin factura ni gasto. Ajusta el saldo
+            de {socioNombre} directamente.
           </p>
         </div>
         <div className="p-5 space-y-3">
@@ -1191,17 +1256,17 @@ function MovimientoModal({ form, setForm, saving, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setForm({ ...form, quien: 'D' })}
-                className={`px-3 py-2 rounded-lg border text-sm font-semibold ${esDiana ? 'bg-fuchsia-100 border-fuchsia-400 text-fuchsia-800' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                onClick={() => setForm({ ...form, quien: 'S' })}
+                className={`px-3 py-2 rounded-lg border text-sm font-semibold ${esSocio ? 'bg-fuchsia-100 border-fuchsia-400 text-fuchsia-800' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                Diana (resta saldo)
+                {socioNombre} (resta saldo)
               </button>
               <button
                 type="button"
-                onClick={() => setForm({ ...form, quien: 'E' })}
-                className={`px-3 py-2 rounded-lg border text-sm font-semibold ${!esDiana ? 'bg-amber-100 border-amber-400 text-amber-800' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                onClick={() => setForm({ ...form, quien: 'U' })}
+                className={`px-3 py-2 rounded-lg border text-sm font-semibold ${!esSocio ? 'bg-amber-100 border-amber-400 text-amber-800' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                Ellen (suma saldo)
+                Yo (suma saldo)
               </button>
             </div>
           </div>
@@ -1296,15 +1361,15 @@ function Card({ label, value, subtitle, tone = 'slate', big = false, onClick }) 
   );
 }
 
-function TipoBadge({ tipo }) {
+function TipoBadge({ tipo, socioNombre }) {
   if (tipo === 'venta') {
     return <span className="text-[10px] uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Venta</span>;
   }
   if (tipo === 'gasto') {
     return <span className="text-[10px] uppercase tracking-wide text-red-700 bg-red-100 px-1.5 py-0.5 rounded">Gasto</span>;
   }
-  if (tipo === 'pago_diana') {
-    return <span className="text-[10px] uppercase tracking-wide text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded">Pago Diana</span>;
+  if (tipo === 'pago_socio' || tipo === 'pago_diana') {
+    return <span className="text-[10px] uppercase tracking-wide text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded">Pago {socioNombre}</span>;
   }
   if (tipo === 'movimiento') {
     return <span className="text-[10px] uppercase tracking-wide text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded">Movimiento</span>;

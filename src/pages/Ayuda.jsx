@@ -6,7 +6,8 @@
 
 import { useMemo, useState } from 'react';
 import { pdf } from '@react-pdf/renderer';
-import { Download, BookOpen, Info, Lightbulb, AlertCircle } from 'lucide-react';
+import { Download, BookOpen, Info, Lightbulb, AlertCircle, PlayCircle } from 'lucide-react';
+import { TOURS } from '../tours/tourDefinitions.js';
 import { seccionesParaVariante } from '../data/guiaContenido.js';
 import { GuiaPDF } from '../pdf/templates/GuiaPDF.jsx';
 import { APP_VARIANT } from '../utils/variant.js';
@@ -104,15 +105,50 @@ function Ayuda() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={descargarPDF}
-          disabled={descargando}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition-colors disabled:opacity-50"
-        >
-          <Download size={16} />
-          {descargando ? 'Generando…' : 'Descargar PDF'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('start-tour', { detail: 'general' }))}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+            title="Volver a ver el tour guiado"
+          >
+            <PlayCircle size={16} />
+            Ver tour
+          </button>
+          <button
+            type="button"
+            onClick={descargarPDF}
+            disabled={descargando}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition-colors disabled:opacity-50"
+          >
+            <Download size={16} />
+            {descargando ? 'Generando…' : 'Descargar PDF'}
+          </button>
+        </div>
+      </div>
+
+      {/* v1.5.0: seccion visible de tours guiados por seccion */}
+      <div className="bg-brand/5 border-b border-brand/20 px-8 py-4">
+        <div className="flex items-center gap-3 mb-2">
+          <PlayCircle size={18} className="text-brand" />
+          <h2 className="text-sm font-semibold text-slate-800">Tours guiados por seccion</h2>
+        </div>
+        <p className="text-xs text-slate-600 mb-3">
+          Click en cualquiera para ver un mini-tour paso a paso.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {Object.keys(TOURS).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('start-tour', { detail: key }))}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
+            >
+              <PlayCircle size={12} />
+              Tour: {key === 'general' ? 'General' : key.charAt(0).toUpperCase() + key.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Cuerpo: TOC + contenido */}

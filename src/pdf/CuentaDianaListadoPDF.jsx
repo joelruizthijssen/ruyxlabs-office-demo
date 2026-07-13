@@ -118,7 +118,7 @@ function CuentaDianaListadoPDF({ titulo, periodo, empresa, filas, columnas, tota
               <Text style={styles.subtitulo}>Periodo: {periodo}</Text>
             )}
             <Text style={styles.subtitulo}>
-              Cuenta interna de Diana — Vista interna, NO fiscal.
+              Cuenta interna de socio — Vista interna, NO fiscal.
             </Text>
           </View>
           <View style={styles.empresaBlock}>

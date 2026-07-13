@@ -305,14 +305,29 @@ export const SECCIONES = [
   },
 
   {
-    id: 'cuenta-diana',
-    titulo: 'Cuenta Diana',
-    variantes: FAM_ONLY,
+    id: 'cuenta-socios',
+    titulo: 'Cuenta de socios internos',
+    variantes: ALL,
     bloques: [
       {
         tipo: 'parrafo',
         texto:
-          'Modulo especifico para llevar la contabilidad de una cuenta separada (gastos personales asociados a la actividad, anticipos, etc.). Cada linea de factura o gasto puede asignar un porcentaje a esta cuenta.',
+          'Modulo opcional para llevar una cuenta interna con uno o mas socios (colaboradores que reciben un % de la base imponible de tus facturas y gastos). No es fiscal: es una cuenta corriente entre tu y el socio.',
+      },
+      {
+        tipo: 'parrafo',
+        texto:
+          'Como activarlo: en Ajustes > Socios internos anades un socio con su nombre (por ejemplo "Diana", "Marta", "Juan"...). En cuanto hay 1 socio, aparece un menu "Cuenta [nombre]" en la barra lateral y una columna en el editor de facturas/gastos para marcar el %.',
+      },
+      {
+        tipo: 'parrafo',
+        texto:
+          'Multi-socio: puedes tener varios socios por empresa. Con 2 o mas, el editor de facturas muestra un boton que abre un mini-panel para poner el % de cada socio en la linea. La pagina Cuenta socios muestra un selector arriba para ver la cuenta de cada uno por separado.',
+      },
+      {
+        tipo: 'parrafo',
+        texto:
+          'Si no lo usas: deja la lista de socios vacia y esta funcion desaparece por completo del menu.',
       },
     ],
   },

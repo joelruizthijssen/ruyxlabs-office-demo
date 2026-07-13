@@ -31,6 +31,7 @@ import { LicenseGate, TrialBanner } from './components/LicenseGate.jsx';
 import { IS_PRIVATE_BUILD } from './utils/variant.js';
 import DemoBanner from './components/DemoBanner.jsx';
 import DemoWelcomeModal from './components/DemoWelcomeModal.jsx';
+import TourController from './tours/TourController.jsx';
 
 // Decide si hay que mostrar el wizard de primer arranque. Lo activamos solo si
 // faltan los dos campos obligatorios (nombre + NIF). Con eso evitamos que se
@@ -151,6 +152,7 @@ function App() {
             open={paletteOpen}
             onClose={() => setPaletteOpen(false)}
           />
+          <TourController />
         </>
       )}
 

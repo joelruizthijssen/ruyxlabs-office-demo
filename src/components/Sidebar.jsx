@@ -48,6 +48,7 @@ function Sidebar() {
   const [showAcercaDe, setShowAcercaDe] = useState(false);
   const [vencidasCount, setVencidasCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
+  const [socios, setSocios] = useState([]);
 
   async function refrescarLogo() {
     if (!window.api) return;
@@ -78,25 +79,36 @@ function Sidebar() {
     } catch { /* noop */ }
   }
 
+  async function refrescarSocios() {
+    if (!window.api?.socios) return;
+    try {
+      const rows = await window.api.socios.list();
+      if (Array.isArray(rows)) setSocios(rows);
+    } catch { /* noop */ }
+  }
+
   useEffect(() => {
     refrescarLogo();
     refrescarStats();
     refrescarNotifs();
-    // Recargar cuando Ajustes notifica que ha cambiado settings.
-    const onChanged = () => { refrescarLogo(); refrescarNotifs(); };
+    refrescarSocios();
+    const onChanged = () => { refrescarLogo(); refrescarNotifs(); refrescarSocios(); };
     const onDataChanged = () => { refrescarStats(); refrescarNotifs(); };
     const onNotifChanged = () => refrescarNotifs();
-    const onFocus = () => { refrescarStats(); refrescarNotifs(); };
+    const onSociosChanged = () => refrescarSocios();
+    const onFocus = () => { refrescarStats(); refrescarNotifs(); refrescarSocios(); };
     window.addEventListener('settings-changed', onChanged);
     window.addEventListener('empresa-changed', onChanged);
     window.addEventListener('data-changed', onDataChanged);
     window.addEventListener('notif-changed', onNotifChanged);
+    window.addEventListener('socios-changed', onSociosChanged);
     window.addEventListener('focus', onFocus);
     return () => {
       window.removeEventListener('settings-changed', onChanged);
       window.removeEventListener('empresa-changed', onChanged);
       window.removeEventListener('data-changed', onDataChanged);
       window.removeEventListener('notif-changed', onNotifChanged);
+      window.removeEventListener('socios-changed', onSociosChanged);
       window.removeEventListener('focus', onFocus);
     };
   }, []);
@@ -117,11 +129,20 @@ function Sidebar() {
   }
   void tipoNegocio;
 
-  // En la build PRIMO filtramos a lo basico (presupuestos/facturas/clientes/
-  // gastos/ajustes/inicio). El resto del menu queda fuera para reducir ruido.
+  // v1.5.0: gate del item "diana" segun N socios activos + label dinamico.
+  const nSocios = socios.length;
+  const socioLabel = nSocios === 1
+    ? `Cuenta ${socios[0].nombre}`
+    : (nSocios >= 2 ? 'Cuenta socios' : null);
+  const menuItemsConSocios = menuItems.map((it) => {
+    if (it.key !== 'diana') return it;
+    if (nSocios === 0) return { ...it, _hide: true };
+    return { ...it, label: socioLabel };
+  }).filter((it) => !it._hide);
+
   const visibleItems = IS_PRIMO_BUILD
-    ? menuItems.filter((it) => PRIMO_VISIBLE_KEYS.has(it.key))
-    : menuItems;
+    ? menuItemsConSocios.filter((it) => PRIMO_VISIBLE_KEYS.has(it.key))
+    : menuItemsConSocios;
 
   return (
     <>
@@ -183,6 +204,7 @@ function Sidebar() {
               key={to}
               to={to}
               end={end}
+              data-tour={`sidebar-${key}`}
               className={({ isActive }) =>
                 [
                   'flex items-center gap-3 py-3 px-4 rounded-lg transition-colors',

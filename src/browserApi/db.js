@@ -728,6 +728,80 @@ function _runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_diana_ajustes_empresa_fecha ON diana_ajustes(empresa_id, fecha);
   `);
 
+  // v1.5.0: MULTI-SOCIO GENERALIZADO
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS empresa_socios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL DEFAULT 1,
+      nombre TEXT NOT NULL,
+      orden INTEGER NOT NULL DEFAULT 0,
+      saldo_inicial REAL DEFAULT 0,
+      color TEXT,
+      notas TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_empresa_socios_empresa
+      ON empresa_socios(empresa_id) WHERE deleted_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS linea_factura_socio (
+      linea_id INTEGER NOT NULL REFERENCES lineas_factura(id) ON DELETE CASCADE,
+      socio_id INTEGER NOT NULL REFERENCES empresa_socios(id) ON DELETE CASCADE,
+      pct REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (linea_id, socio_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_linea_factura_socio_socio
+      ON linea_factura_socio(socio_id);
+
+    CREATE TABLE IF NOT EXISTS gasto_linea_socio (
+      linea_id INTEGER NOT NULL REFERENCES gasto_lineas(id) ON DELETE CASCADE,
+      socio_id INTEGER NOT NULL REFERENCES empresa_socios(id) ON DELETE CASCADE,
+      pct REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (linea_id, socio_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gasto_linea_socio_socio
+      ON gasto_linea_socio(socio_id);
+
+    CREATE TABLE IF NOT EXISTS pagos_socio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL DEFAULT 1,
+      socio_id INTEGER NOT NULL REFERENCES empresa_socios(id) ON DELETE CASCADE,
+      fecha TEXT NOT NULL,
+      importe REAL NOT NULL DEFAULT 0,
+      notas TEXT,
+      gasto_id INTEGER REFERENCES gastos(id) ON DELETE SET NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_pagos_socio_empresa_fecha
+      ON pagos_socio(empresa_id, fecha);
+
+    CREATE TABLE IF NOT EXISTS socio_ajustes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL DEFAULT 1,
+      socio_id INTEGER NOT NULL REFERENCES empresa_socios(id) ON DELETE CASCADE,
+      fecha TEXT NOT NULL,
+      concepto TEXT NOT NULL DEFAULT '',
+      importe REAL NOT NULL DEFAULT 0,
+      quien TEXT NOT NULL CHECK (quien IN ('S','U')),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_socio_ajustes_empresa_fecha
+      ON socio_ajustes(empresa_id, fecha);
+
+    CREATE TABLE IF NOT EXISTS socio_cierres (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL DEFAULT 1,
+      socio_id INTEGER NOT NULL REFERENCES empresa_socios(id) ON DELETE CASCADE,
+      fecha TEXT NOT NULL,
+      saldo_al_cierre REAL DEFAULT 0,
+      notas TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_socio_cierres_socio_fecha
+      ON socio_cierres(socio_id, fecha);
+  `);
+
   // --- Semilla minima para demo web ---
   // Solo si no existe empresa nº1 con datos (BD fresca). Marca legal como
   // aceptado y crea una empresa demo con datos plausibles, para que la app

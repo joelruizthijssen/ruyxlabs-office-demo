@@ -228,6 +228,7 @@ export async function initBrowserApi() {
     import('./mount/gastos.js'),
     import('./mount/productosPedidos.js'),
     import('./mount/informes.js'),
+    import('./mount/socios.js'),
     import('./mount/extras.js'),
   ]);
   for (const m of mounts) m.default();
