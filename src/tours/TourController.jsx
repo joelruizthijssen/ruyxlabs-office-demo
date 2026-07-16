@@ -11,10 +11,17 @@
 //      dispara el tour que se pida. Lo usa el boton "Ver tour" en Ayuda.
 //   3. El tour pide ir a una ruta especifica antes de arrancar (startPath) para
 //      que los elementos [data-tour] existan en el DOM.
+//
+// NOTA v1.5.0: NO usamos modo controlado (stepIndex prop). Dejamos que Joyride
+// gestione internamente su indice. Nuestro callback solo maneja el fin del
+// tour (FINISHED/SKIPPED/CLOSE) para persistir "visto" y desmontar. Esto evita
+// race conditions entre setState y el ciclo interno de Joyride que causaban
+// que el tour se pegara con overlay sin tooltip al pasar de un step al
+// siguiente.
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Joyride, STATUS } from 'react-joyride';
+import { Joyride, STATUS, ACTIONS } from 'react-joyride';
 import { TOURS, isTourSeen, markTourSeen } from './tourDefinitions.js';
 
 const STYLES = {
@@ -62,7 +69,6 @@ function TourController() {
   const loc = useLocation();
   const [activeTour, setActiveTour] = useState(null);
   const [run, setRun] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
 
   // Auto-launch del tour general en primer arranque (~800ms delay para que el
   // DOM y los elementos [data-tour] esten montados y estables).
@@ -92,29 +98,37 @@ function TourController() {
   const startTour = useCallback((key) => {
     const tour = TOURS[key];
     if (!tour) return;
-    setActiveTour(key);
-    setStepIndex(0);
-    // Ir a la ruta apropiada antes de arrancar el tour.
-    if (tour.startPath && loc.pathname !== tour.startPath) {
-      nav(tour.startPath);
-      // Dejar tiempo a que la ruta cargue y monte sus [data-tour].
-      setTimeout(() => setRun(true), 400);
-    } else {
-      setTimeout(() => setRun(true), 100);
-    }
+    // Reset primero: desmonta cualquier Joyride previo antes de re-montarlo
+    // con el nuevo tour. Sin esto, si activeTour ya estaba puesto de un tour
+    // anterior, Joyride no re-inicializa correctamente.
+    setRun(false);
+    setActiveTour(null);
+    setTimeout(() => {
+      setActiveTour(key);
+      // Ir a la ruta apropiada antes de arrancar el tour.
+      if (tour.startPath && loc.pathname !== tour.startPath) {
+        nav(tour.startPath);
+        setTimeout(() => setRun(true), 500);
+      } else {
+        setTimeout(() => setRun(true), 200);
+      }
+    }, 50);
   }, [loc.pathname, nav]);
 
   const handleCallback = useCallback((data) => {
     const { status, action } = data || {};
-    if (status === STATUS.FINISHED || status === STATUS.SKIPPED || action === 'close') {
+
+    // Fin del tour: terminado, saltado o cerrado con X
+    if (
+      status === STATUS.FINISHED ||
+      status === STATUS.SKIPPED ||
+      action === ACTIONS.CLOSE ||
+      action === ACTIONS.RESET
+    ) {
       setRun(false);
       if (activeTour) markTourSeen(activeTour);
       setActiveTour(null);
-      setStepIndex(0);
-    } else if (data?.type === 'step:after' && data?.index != null) {
-      // El step avanzo/retrocedio; sincronizamos el stepIndex nuestro.
-      const next = data.action === 'prev' ? data.index - 1 : data.index + 1;
-      setStepIndex(next);
+      return;
     }
   }, [activeTour]);
 
@@ -124,9 +138,9 @@ function TourController() {
 
   return (
     <Joyride
+      key={activeTour}
       steps={steps}
       run={run}
-      stepIndex={stepIndex}
       continuous
       showSkipButton
       showProgress
