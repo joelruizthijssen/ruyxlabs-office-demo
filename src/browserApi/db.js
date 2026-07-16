@@ -568,6 +568,32 @@ function _runMigrations() {
   _ensureColumn('facturas', 'titulo_documento_override', 'titulo_documento_override TEXT');
   _ensureColumn('presupuestos', 'titulo_documento_override', 'titulo_documento_override TEXT');
 
+  // v1.5.0 checkpoint 4: titulos default por empresa (5 tipos de documento).
+  // Cuando se crea factura/presupuesto se lee el default de la empresa activa
+  // y se copia a titulo_documento_override.
+  _ensureColumn('empresas', 'titulo_default_factura',       'titulo_default_factura TEXT');
+  _ensureColumn('empresas', 'titulo_default_proforma',      'titulo_default_proforma TEXT');
+  _ensureColumn('empresas', 'titulo_default_contado',       'titulo_default_contado TEXT');
+  _ensureColumn('empresas', 'titulo_default_rectificativa', 'titulo_default_rectificativa TEXT');
+  _ensureColumn('empresas', 'titulo_default_presupuesto',   'titulo_default_presupuesto TEXT');
+
+  // v1.5.0 checkpoint 5: codigo producto en lineas del PDF.
+  // producto_id en lineas para LEFT JOIN, toggle en empresa para prepend.
+  _ensureColumn('empresas', 'mostrar_codigo_en_lineas', 'mostrar_codigo_en_lineas INTEGER DEFAULT 0');
+  _ensureColumn('lineas_factura', 'producto_id', 'producto_id INTEGER');
+  _ensureColumn('lineas_presupuesto', 'producto_id', 'producto_id INTEGER');
+
+  // v1.5.0 checkpoint 6: PDFs bilingues ES/EN.
+  // idioma_documento en cabecera del doc (override), idioma_documentos en
+  // ficha cliente/proveedor (default), nombre_en/descripcion_en en productos
+  // (para reemplazo en render).
+  _ensureColumn('facturas',    'idioma_documento',  'idioma_documento TEXT');
+  _ensureColumn('presupuestos','idioma_documento',  'idioma_documento TEXT');
+  _ensureColumn('clientes',    'idioma_documentos', 'idioma_documentos TEXT');
+  _ensureColumn('proveedores', 'idioma_documentos', 'idioma_documentos TEXT');
+  _ensureColumn('productos',   'nombre_en',         'nombre_en TEXT');
+  _ensureColumn('productos',   'descripcion_en',    'descripcion_en TEXT');
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS pedidos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -800,6 +826,47 @@ function _runMigrations() {
     );
     CREATE INDEX IF NOT EXISTS idx_socio_cierres_socio_fecha
       ON socio_cierres(socio_id, fecha);
+  `);
+
+  // v1.5.0 checkpoint 7: modulo depositos (stock en cliente-tienda).
+  // Doble tabla: depositos (uno por cliente-tienda), movimientos con SUM
+  // signed para stock actual y precio medio ponderado.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS depositos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL DEFAULT 1,
+      cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+      nombre TEXT NOT NULL,
+      notas TEXT,
+      activo INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_depositos_empresa_cliente
+      ON depositos(empresa_id, cliente_id) WHERE activo = 1;
+
+    CREATE TABLE IF NOT EXISTS movimientos_deposito (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deposito_id INTEGER NOT NULL REFERENCES depositos(id) ON DELETE CASCADE,
+      tipo TEXT NOT NULL CHECK (tipo IN ('entrada','salida_factura','ajuste')),
+      fecha TEXT NOT NULL,
+      producto_id INTEGER REFERENCES productos(id),
+      codigo TEXT,
+      concepto TEXT,
+      cantidad_signed REAL NOT NULL,
+      precio_unitario REAL DEFAULT 0,
+      factura_id INTEGER REFERENCES facturas(id),
+      albaran_id INTEGER,
+      linea_factura_id INTEGER REFERENCES lineas_factura(id),
+      notas TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_movimientos_deposito_deposito
+      ON movimientos_deposito(deposito_id);
+    CREATE INDEX IF NOT EXISTS idx_movimientos_deposito_factura
+      ON movimientos_deposito(factura_id);
+    CREATE INDEX IF NOT EXISTS idx_movimientos_deposito_producto
+      ON movimientos_deposito(producto_id);
   `);
 
   // --- Semilla minima para demo web ---

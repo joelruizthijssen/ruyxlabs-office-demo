@@ -15,6 +15,110 @@ import {
 export const LINE_GAP_PRES = 16;
 export const LINE_GAP_FAC = 14;
 
+// v1.5.0: labels de PDF por idioma. Prioridad al resolver: idioma_documento
+// del documento > idioma_documentos del cliente > idioma_ui de la empresa
+// > 'es'. NULL/undefined -> 'es'. Cualquier valor distinto de 'en' -> 'es'
+// (defensivo).
+export function pdfLabels(lang) {
+  const L = lang === 'en' ? 'en' : 'es';
+  const M = {
+    es: {
+      // Titulos de documento (usados en cabecera cuando no hay override)
+      factura: 'FACTURA',
+      factura_borrador: 'BORRADOR DE FACTURA',
+      proforma: 'FACTURA PROFORMA',
+      contado: 'CONTADO',
+      rectificativa: 'FACTURA RECTIFICATIVA',
+      presupuesto: 'PRESUPUESTO',
+      documento_interno: 'RESUMEN DE TRABAJOS',
+      // Numero corto junto al titulo ("Nº 2026/01")
+      numero_prefix: 'Nº',
+      // Cabecera tabla
+      concepto: 'CONCEPTO',
+      descripcion: 'DESCRIPCION',
+      unid: 'UNID.',
+      precio_u: 'PRECIO U.',
+      dto: 'DTO.',
+      importe: 'IMPORTE',
+      // Cabecera cliente/emisor
+      cliente_header: 'CLIENTE:',
+      // Fecha
+      fecha_prefix: 'Fecha:',
+      fecha_vencimiento: 'Vencimiento',
+      payment_terms_paren: 'Payment Terms',
+      // Totales
+      subtotal: 'SUBTOTAL',
+      descuento: 'DESCUENTO',
+      base_imponible: 'BASE IMPONIBLE',
+      iva: 'IVA',
+      irpf: 'IRPF',
+      recargo_eq: 'RECARGO DE EQUIVALENCIA',
+      total: 'TOTAL',
+      pendiente: 'PENDIENTE',
+      pago_a_cuenta: 'PAGO A CUENTA',
+      // Notas y textos legales
+      nota_intracomunitaria:
+        'Operación intracomunitaria exenta de IVA. Inversión del sujeto pasivo '
+        + '(art. 196 Directiva 2006/112/CE; art. 84.Uno.2.º Ley 37/1992 del IVA).',
+      iva_no_incluido: 'IVA no incluido',
+      notas: 'NOTAS',
+      // Pie de pagina
+      pagina_de: 'Página',
+      pagina_de_sep: 'de',
+    },
+    en: {
+      factura: 'INVOICE',
+      factura_borrador: 'DRAFT INVOICE',
+      proforma: 'PROFORMA INVOICE',
+      contado: 'CASH RECEIPT',
+      rectificativa: 'CREDIT NOTE',
+      presupuesto: 'QUOTE',
+      documento_interno: 'WORK SUMMARY',
+      numero_prefix: 'No.',
+      concepto: 'DESCRIPTION',
+      descripcion: 'DESCRIPTION',
+      unid: 'QTY',
+      precio_u: 'UNIT PRICE',
+      dto: 'DISC.',
+      importe: 'AMOUNT',
+      cliente_header: 'CLIENT:',
+      fecha_prefix: 'Date:',
+      fecha_vencimiento: 'Payment terms',
+      payment_terms_paren: 'Vencimiento',
+      subtotal: 'SUBTOTAL',
+      descuento: 'DISCOUNT',
+      base_imponible: 'TAXABLE BASE',
+      iva: 'VAT',
+      irpf: 'W.H. TAX',
+      recargo_eq: 'EQUIVALENCE SURCHARGE',
+      total: 'TOTAL',
+      pendiente: 'BALANCE DUE',
+      pago_a_cuenta: 'PAYMENT ON ACCOUNT',
+      nota_intracomunitaria:
+        'Intra-Community supply exempt from VAT. Reverse charge '
+        + '(Art. 196 Directive 2006/112/EC; Art. 84.One.2 Spanish VAT Law 37/1992).',
+      iva_no_incluido: 'VAT not included',
+      notas: 'NOTES',
+      pagina_de: 'Page',
+      pagina_de_sep: 'of',
+    },
+  };
+  return M[L];
+}
+
+// Resuelve el idioma para un PDF concreto siguiendo la prioridad:
+//   1. doc.idioma_documento (usuario forzo un idioma para este documento).
+//   2. cliente.idioma_documentos (preferencia del cliente/proveedor).
+//   3. settings.idioma_ui (idioma global de la empresa activa).
+//   4. 'es' (default absoluto).
+export function resolvePdfLang(doc, cliente, settings) {
+  const cand = doc?.idioma_documento
+    || cliente?.idioma_documentos
+    || settings?.idioma_ui
+    || 'es';
+  return cand === 'en' ? 'en' : 'es';
+}
+
 // v1.2.36: layout de tabla en facturas. Columnas fijas para UNID/PRECIO/DTO/
 // IMPORTE; DESCRIPCION ocupa el resto via flex:1. Pedido madre para que la
 // factura tenga una columna por dato en vez del subline gris.
@@ -89,6 +193,9 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   const d = doc || {};
   const s = settings || {};
   const ls = lineas || [];
+  // v1.5.0: idioma efectivo del PDF y mapa de labels.
+  const pdfLang = resolvePdfLang(d, cliente, s);
+  const L = pdfLabels(pdfLang);
   const ivaPct = Number(d.iva_porcentaje) || 0;
   const irpfPct = Number(d.irpf_pct) || 0;
   // Operacion intracomunitaria (solo facturas): si el cliente esta marcado
@@ -117,10 +224,7 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   );
   const descuentoTotal = round2((descuentoLineas || 0) + (descuentoGlobal || 0));
   // Nota legal al pie de los totales cuando es operacion intracomunitaria.
-  const notaFiscal = reverseCharge
-    ? 'Operación intracomunitaria exenta de IVA. Inversión del sujeto pasivo '
-      + '(art. 196 Directiva 2006/112/CE; art. 84.Uno.2.º Ley 37/1992 del IVA).'
-    : null;
+  const notaFiscal = reverseCharge ? L.nota_intracomunitaria : null;
   // Marca del documento: su nombre comercial y logo van a la cabecera; el
   // nombre fiscal sigue constando (en EmisorBlock, mas pequeno) por ley.
   const marca = d.marca || null;
@@ -188,29 +292,34 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   // veremos al render emisor en cada plantilla). La BD sigue guardando
   // numero/datos/etc. normalmente; solo cambia el render.
   const docInterno = tipo === 'factura' && !!d.documento_interno;
-  // v1.4.0: titulo custom del documento (override). Prioridad:
-  //   docInterno > titulo_documento_override > default por subtipo.
+  // v1.4.0: la usuaria puede renombrar el titulo del documento por documento
+  // (util para que la misma proforma se llame "Factura Proforma" en una
+  // empresa y "Confirmacion de pedido" en otra, sin duplicar el subtipo).
+  // Prioridad:
+  //   1. documento_interno (siempre "RESUMEN DE TRABAJOS" — es un modo aparte).
+  //   2. titulo_documento_override si es no-vacio (usuaria tomo el control).
+  //   3. Default segun subtipo (comportamiento historico).
   const tituloOverride =
     typeof d.titulo_documento_override === 'string' && d.titulo_documento_override.trim()
       ? d.titulo_documento_override.trim().toUpperCase()
       : null;
   let tituloDoc;
   if (docInterno) {
-    tituloDoc = 'RESUMEN DE TRABAJOS';
+    tituloDoc = L.documento_interno;
   } else if (tituloOverride) {
     tituloDoc = tituloOverride;
   } else if (tipo === 'presupuesto') {
-    tituloDoc = 'PRESUPUESTO';
+    tituloDoc = L.presupuesto;
   } else if (subtipo === 'proforma') {
-    tituloDoc = 'FACTURA PROFORMA';
+    tituloDoc = L.proforma;
   } else if (subtipo === 'nota_contado') {
     // v1.2.25: pedido madre — venta al contado se titula "CONTADO" (mas corto
     // y claro) y el numero NC- no aparece en el PDF (cabeceraNumero='' abajo).
-    tituloDoc = 'CONTADO';
+    tituloDoc = L.contado;
   } else if (subtipo === 'rectificativa') {
-    tituloDoc = 'FACTURA RECTIFICATIVA';
+    tituloDoc = L.rectificativa;
   } else {
-    tituloDoc = marcarBorrador ? 'BORRADOR DE FACTURA' : 'FACTURA';
+    tituloDoc = marcarBorrador ? L.factura_borrador : L.factura;
   }
   // Numero a la derecha/junto al titulo: siempre corto "Nº YYYY/NN" porque
   // el titulo grande ya dice "FACTURA" o "PRESUPUESTO" — repetirlo es ruido.
@@ -219,7 +328,7 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   // v1.2.31: en documento interno tampoco se imprime numero.
   const cabeceraNumero = (subtipo === 'nota_contado' || docInterno)
     ? ''
-    : `Nº ${d.numero ?? ''}`.trim();
+    : `${L.numero_prefix} ${d.numero ?? ''}`.trim();
   // v1.2.32: titulos largos como "RESUMEN DE TRABAJOS" (19 chars), "FACTURA
   // RECTIFICATIVA" (21) o "BORRADOR DE FACTURA" (19) se cortaban en 2 lineas
   // en plantillas con fontSize grande. Marcamos como largo todo titulo > 15
@@ -228,13 +337,13 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   // v1.2.32: label DESCUENTO con el % aplicado cuando el descuento global
   // del documento es porcentual. Si es en EUR fijos o si solo hay descuentos
   // por linea, queda como "DESCUENTO" a secas (el % seria ambiguo).
-  let descuentoLabel = 'DESCUENTO';
+  let descuentoLabel = L.descuento;
   const dtoGlobalTipo = d.descuento_tipo === 'eur' ? 'eur' : 'pct';
   const dtoGlobalValor = Number(d.descuento_valor) || 0;
   if (dtoGlobalTipo === 'pct' && dtoGlobalValor > 0) {
-    descuentoLabel = `DESCUENTO ${dtoGlobalValor}%`;
+    descuentoLabel = `${L.descuento} ${dtoGlobalValor}%`;
   }
-  const tableHeaderLeft = tipo === 'factura' ? 'CONCEPTO' : 'DESCRIPCION';
+  const tableHeaderLeft = tipo === 'factura' ? L.concepto : L.descripcion;
   const fechaTxt = `${(d.ciudad_emision || '').toUpperCase()}${
     d.ciudad_emision ? ', ' : ''
   }${formatFechaES(d.fecha)}`;
@@ -250,9 +359,49 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
   const cobrosPdf = (tipo === 'factura' && Array.isArray(d.cobros))
     ? d.cobros.filter((c) => !!c.mostrar_en_pdf)
     : [];
+  // v1.5.0: transformaciones a las lineas para el render del PDF (NO se
+  // aplican a los calculos de totales, que ya se hicieron arriba con `ls`).
+  // Dos transformaciones combinables:
+  //   1. Idioma EN: si `nombre_en` / `descripcion_en` estan rellenos en la
+  //      linea (via producto del catalogo con traduccion), usarlos como
+  //      titulo/descripcion en el PDF. Si no hay traduccion, fallback al
+  //      texto en espanol (siempre mejor mostrar algo).
+  //   2. Codigo en lineas: si la empresa activo el toggle, prepend el codigo
+  //      al titulo/descripcion en formato "[COD-123] Nombre".
+  const _mostrarCodigo = !!s.mostrar_codigo_en_lineas;
+  const _esEN = pdfLang === 'en';
+  const lsRender = (_esEN || _mostrarCodigo)
+    ? ls.map((l) => {
+        let out = l;
+        // 1) Traduccion a EN si aplica
+        if (_esEN) {
+          const titEn = (l.nombre_en || l.titulo_en || '').trim();
+          const descEn = (l.descripcion_en || '').trim();
+          if (titEn || descEn) {
+            out = {
+              ...out,
+              ...(titEn ? { titulo: titEn } : {}),
+              ...(descEn ? { descripcion: descEn } : {}),
+            };
+          }
+        }
+        // 2) Codigo prependido si el toggle esta ON
+        if (_mostrarCodigo) {
+          const codigo = (out.codigo || '').trim();
+          if (codigo) {
+            const tit = (out.titulo || '').trim();
+            const desc = (out.descripcion || '').trim();
+            if (tit) out = { ...out, titulo: `[${codigo}] ${tit}` };
+            else if (desc) out = { ...out, descripcion: `[${codigo}] ${desc}` };
+            else out = { ...out, titulo: `[${codigo}]` };
+          }
+        }
+        return out;
+      })
+    : ls;
   return {
     tipo,
-    d, s: sOut, ls,
+    d, s: sOut, ls: lsRender,
     ivaPct, base, iva, total, irpf, irpfPct, ivaBreakdown,
     recargoEq,
     subtotalBruto, descuentoLineas, descuentoGlobal, descuentoTotal,
@@ -268,6 +417,9 @@ export function deriveDocData({ tipo, doc, lineas, cliente, settings }) {
     notaFiscal,
     hitos,
     cobrosPdf,
+    // v1.5.0: idioma efectivo del PDF y labels traducidos.
+    pdfLang,
+    L,
   };
 }
 
@@ -633,19 +785,20 @@ export function renderLineRow(tipo, l, i, styles, modoDetallado, ocultarSubitems
 // dentro del <View styles.tableHeader> de cada plantilla. Devuelve un
 // fragmento. La plantilla puede pasar colorOverride para teñir los textos
 // (Cabecera/Lateral lo usan con v.brandColor).
-export function FacturaTableHeaderCells({ styles, tableHeaderLeft, colorOverride }) {
+export function FacturaTableHeaderCells({ styles, tableHeaderLeft, colorOverride, L }) {
   // thNum es opcional — si la plantilla no lo declara, usamos thImp como
   // base (mismo tamaño y peso que IMPORTE pero alineamos a la derecha).
   const thNum = styles.thNum || styles.thImp;
   const tint = colorOverride ? { color: colorOverride } : null;
+  const T = L || pdfLabels('es');
   return (
     <>
       <Text style={[styles.thDesc, { flex: 1 }, tint]}>{tableHeaderLeft}</Text>
       <View style={{ flexDirection: 'row' }}>
-        <Text style={[thNum, { width: FACT_COL.unid, textAlign: 'right' }, tint]}>UNID.</Text>
-        <Text style={[thNum, { width: FACT_COL.precio, textAlign: 'right' }, tint]}>PRECIO U.</Text>
-        <Text style={[thNum, { width: FACT_COL.dto, textAlign: 'right' }, tint]}>DTO.</Text>
-        <Text style={[styles.thImp, { width: FACT_COL.imp }, tint]}>IMPORTE</Text>
+        <Text style={[thNum, { width: FACT_COL.unid, textAlign: 'right' }, tint]}>{T.unid}</Text>
+        <Text style={[thNum, { width: FACT_COL.precio, textAlign: 'right' }, tint]}>{T.precio_u}</Text>
+        <Text style={[thNum, { width: FACT_COL.dto, textAlign: 'right' }, tint]}>{T.dto}</Text>
+        <Text style={[styles.thImp, { width: FACT_COL.imp }, tint]}>{T.importe}</Text>
       </View>
     </>
   );
@@ -678,7 +831,11 @@ export function TotalsBlock({
   // lista no esta vacia, debajo del TOTAL aparece un bloque en rojo con
   // cada cobro (fecha + importe) y una linea PENDIENTE con el restante.
   cobrosPdf,
+  // v1.5.0: mapa de labels traducidos. Si no se pasa, fallback a los labels
+  // en espanol (para que plantillas antiguas sigan funcionando).
+  L,
 }) {
+  const T = L || pdfLabels('es');
   const dividerStyle = dividerColor
     ? [styles.totalDivider, { backgroundColor: dividerColor }]
     : styles.totalDivider;
@@ -713,7 +870,7 @@ export function TotalsBlock({
       {conDescuentoGlobal ? (
         <>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>SUBTOTAL</Text>
+            <Text style={styles.totalLabel}>{T.subtotal}</Text>
             <Text style={styles.totalValue}>{formatEUR(subtotalParaMostrar)}</Text>
           </View>
           <View style={styles.totalRow}>
@@ -727,32 +884,32 @@ export function TotalsBlock({
         </>
       ) : null}
       <View style={styles.totalRow}>
-        <Text style={styles.totalLabel}>BASE IMPONIBLE</Text>
+        <Text style={styles.totalLabel}>{T.base_imponible}</Text>
         <Text style={styles.totalValue}>{formatEUR(base)}</Text>
       </View>
       {breakdown.map((b) => (
         <View key={`iva-${b.pct}`} style={styles.totalRow}>
           <Text style={styles.totalLabel}>
-            {`IVA ${b.pct}%${breakdown.length > 1 ? ` s/ ${formatEUR(b.base)}` : ''}`}
+            {`${T.iva} ${b.pct}%${breakdown.length > 1 ? ` s/ ${formatEUR(b.base)}` : ''}`}
           </Text>
           <Text style={styles.totalValue}>{formatEUR(b.importe)}</Text>
         </View>
       ))}
       {Number(irpfPct) > 0 ? (
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>{`IRPF ${irpfPct}%`}</Text>
+          <Text style={styles.totalLabel}>{`${T.irpf} ${irpfPct}%`}</Text>
           <Text style={styles.totalValue}>{`− ${formatEUR(irpf || 0)}`}</Text>
         </View>
       ) : null}
       {Number(recargoEq) > 0 ? (
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>RECARGO DE EQUIVALENCIA</Text>
+          <Text style={styles.totalLabel}>{T.recargo_eq}</Text>
           <Text style={styles.totalValue}>{`+ ${formatEUR(recargoEq || 0)}`}</Text>
         </View>
       ) : null}
       <View style={dividerStyle} />
       <View style={styles.totalRow}>
-        <Text style={styles.totalLabelBig}>TOTAL</Text>
+        <Text style={styles.totalLabelBig}>{T.total}</Text>
         <Text style={styles.totalValueBig}>{formatEUR(total)}</Text>
       </View>
       {Array.isArray(cobrosPdf) && cobrosPdf.length > 0 ? (() => {
@@ -769,7 +926,7 @@ export function TotalsBlock({
             {cobrosPdf.map((c, i) => (
               <View key={`pc-${c.id ?? i}`} style={styles.totalRow}>
                 <Text style={[styles.totalLabel, { color: '#b91c1c' }]}>
-                  {`PAGO A CUENTA (${formatFechaES(c.fecha)})`}
+                  {`${T.pago_a_cuenta} (${formatFechaES(c.fecha)})`}
                 </Text>
                 <Text style={[styles.totalValue, { color: '#b91c1c' }]}>
                   {`− ${formatEUR(c.importe)}`}
@@ -778,7 +935,7 @@ export function TotalsBlock({
             ))}
             <View style={[styles.totalRow, { marginTop: 2 }]}>
               <Text style={[styles.totalLabelBig, { color: '#b91c1c' }]}>
-                PENDIENTE
+                {T.pendiente}
               </Text>
               <Text style={[styles.totalValueBig, { color: '#b91c1c' }]}>
                 {formatEUR(pendiente)}
@@ -805,7 +962,7 @@ export function TotalsBlock({
           marginTop: 4,
           fontStyle: 'italic',
         }}>
-          IVA no incluido
+          {T.iva_no_incluido}
         </Text>
       ) : null}
       {fechaVencimientoTxt ? (
@@ -815,7 +972,7 @@ export function TotalsBlock({
           textAlign: 'right',
           marginTop: 6,
         }}>
-          {`Vencimiento (Payment Terms): ${fechaVencimientoTxt}`}
+          {`${T.fecha_vencimiento} (${T.payment_terms_paren}): ${fechaVencimientoTxt}`}
         </Text>
       ) : null}
       {notasPublicas ? (
@@ -827,7 +984,7 @@ export function TotalsBlock({
             letterSpacing: 0.8,
             marginBottom: 3,
           }}>
-            NOTAS
+            {T.notas}
           </Text>
           <Text style={{ fontSize: 9, color: '#2a2a2a', lineHeight: 1.4 }}>
             {notasPublicas}

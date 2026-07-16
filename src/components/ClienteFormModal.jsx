@@ -40,6 +40,8 @@ const emptyForm = {
   tarifa_aplicar: 0,
   notas: '',
   observaciones_internas: '',
+  // v1.5.0: idioma preferido para los documentos.
+  idioma_documentos: null,
 };
 
 function ClienteFormModal({ cliente, onSaved, onCancel }) {
@@ -524,6 +526,22 @@ function ClienteFormModal({ cliente, onSaved, onCancel }) {
                   onChange={(e) => setField('observaciones_internas', e.target.value)}
                   placeholder="Solo para tu referencia (no aparece en el PDF)"
                 />
+              </div>
+              <div>
+                <label className={labelCls}>Idioma preferido para los documentos</label>
+                <select
+                  className={inputCls + ' bg-white'}
+                  value={form.idioma_documentos || ''}
+                  onChange={(e) => setField('idioma_documentos', e.target.value || null)}
+                >
+                  <option value="">Automático (usar el default de la empresa)</option>
+                  <option value="es">Español</option>
+                  <option value="en">Inglés</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Cuando crees una factura/presupuesto para este cliente, el
+                  PDF saldrá en este idioma por defecto.
+                </p>
               </div>
             </div>
           </section>

@@ -185,7 +185,7 @@ function Lateral({ tipo, doc, lineas, cliente, settings }) {
             <EmisorBlock s={v.s} dirLine1={v.dirLine1} dirLine2={v.dirLine2} styles={styles} firmaUrl={v.firmaUrl} />
           </View>
           <View style={styles.clienteBlock}>
-            <Text style={styles.clienteHeader}>CLIENT:</Text>
+            <Text style={styles.clienteHeader}>{v.L.cliente_header}</Text>
             <ClienteContent
               tipo={tipo}
               cliente={cliente}
@@ -205,11 +205,12 @@ function Lateral({ tipo, doc, lineas, cliente, settings }) {
               styles={styles}
               tableHeaderLeft={v.tableHeaderLeft}
               colorOverride={v.brandColor}
+              L={v.L}
             />
           ) : (
             <>
               <Text style={[styles.thDesc, { color: v.brandColor }]}>{v.tableHeaderLeft}</Text>
-              <Text style={[styles.thImp, { color: v.brandColor }]}>IMPORTE</Text>
+              <Text style={[styles.thImp, { color: v.brandColor }]}>{v.L.importe}</Text>
             </>
           )}
         </View>

@@ -13,6 +13,9 @@ import {
   recalcularTotalesFactura, recalcularImporteLineaSiTieneSubs,
   facturaBloqueada, normalizeDianaPct,
 } from './documentos.js';
+import {
+  depositosAplicarSalidaPorFactura, depositosRevertirSalidaPorFactura,
+} from './depositos.js';
 
 function _correlativoDe(numero) {
   const m = String(numero || '').match(/\/(\d+)$/);
@@ -55,9 +58,16 @@ export function facturasGet(id) {
   const db = getDb();
   const f = db.prepare('SELECT * FROM facturas WHERE id = ?').get([id]);
   if (!f) return null;
-  const lineas = db.prepare(
-    'SELECT * FROM lineas_factura WHERE factura_id = ? ORDER BY orden ASC, id ASC',
-  ).all([id]);
+  const lineas = db.prepare(`
+    SELECT lf.*,
+           p.codigo AS producto_codigo,
+           p.nombre_en AS nombre_en,
+           p.descripcion_en AS descripcion_en
+    FROM lineas_factura lf
+    LEFT JOIN productos p ON p.id = lf.producto_id
+    WHERE lf.factura_id = ?
+    ORDER BY lf.orden ASC, lf.id ASC
+  `).all([id]);
   for (const l of lineas) {
     l.sublineas = db.prepare(
       'SELECT * FROM sublineas_factura WHERE linea_id = ? ORDER BY orden ASC, id ASC',
@@ -89,6 +99,17 @@ export function facturasCreate(serie, subtipo) {
   const sub = validSubtipos.includes(subtipo) ? subtipo : 'factura';
   const fecha = new Date().toISOString().slice(0, 10);
 
+  // v1.5.0 checkpoint 4: leer titulo default de la empresa segun subtipo,
+  // se copia a titulo_documento_override al crear.
+  const empresa = db.prepare('SELECT * FROM empresas WHERE id = ?').get([empresaId]);
+  const colTitulo = sub === 'factura' ? 'titulo_default_factura'
+    : sub === 'proforma' ? 'titulo_default_proforma'
+    : sub === 'nota_contado' ? 'titulo_default_contado'
+    : sub === 'rectificativa' ? 'titulo_default_rectificativa'
+    : null;
+  const tituloDefault = (colTitulo && empresa && empresa[colTitulo]
+    && String(empresa[colTitulo]).trim()) || null;
+
   return transaction(() => {
     let numero;
     if (sub === 'proforma' || sub === 'nota_contado' || sub === 'rectificativa') {
@@ -115,15 +136,18 @@ export function facturasCreate(serie, subtipo) {
     const info = db.prepare(`
       INSERT INTO facturas (
         empresa_id, numero, serie, subtipo, fecha, ciudad_emision, cliente_id, asunto,
-        iva_porcentaje, base_imponible, iva_importe, total, estado
+        iva_porcentaje, base_imponible, iva_importe, total, estado,
+        titulo_documento_override
       ) VALUES (
         :empresa_id, :numero, :serie, :subtipo, :fecha, :ciudad, NULL, NULL,
-        :iva, 0, 0, 0, 'borrador'
+        :iva, 0, 0, 0, 'borrador',
+        :titulo_override
       )
     `).run({
       ':empresa_id': empresaId, ':numero': numero, ':serie': s, ':subtipo': sub,
       ':fecha': fecha, ':ciudad': settings.ciudad_emision ?? null,
       ':iva': settings.iva_default ?? 21,
+      ':titulo_override': tituloDefault,
     });
     return { id: info.lastInsertRowid, numero, subtipo: sub };
   });
@@ -138,6 +162,11 @@ export function facturasUpdate(id, data) {
     if (nuevoEstado !== current.estado) {
       db.prepare(`UPDATE facturas SET estado = :estado, updated_at = datetime('now') WHERE id = :id`)
         .run({ ':id': id, ':estado': nuevoEstado });
+      // v1.5.0 checkpoint 7: si vuelve a borrador, revertir la salida del
+      // deposito para no dejar movimientos huerfanos.
+      if (nuevoEstado === 'borrador') {
+        depositosRevertirSalidaPorFactura(id);
+      }
     }
     return facturasGet(id);
   }
@@ -158,6 +187,9 @@ export function facturasUpdate(id, data) {
     typeof m.titulo_documento_override === 'string' && m.titulo_documento_override.trim()
       ? m.titulo_documento_override.trim()
       : null;
+  // v1.5.0 checkpoint 6: idioma del PDF. Solo 'es', 'en' o null (auto).
+  const idiomaDoc = m.idioma_documento === 'en' ? 'en'
+    : m.idioma_documento === 'es' ? 'es' : null;
   db.prepare(`
     UPDATE facturas SET
       numero = :numero, fecha = :fecha, fecha_vencimiento = :fecha_venc, ciudad_emision = :ciudad,
@@ -168,6 +200,7 @@ export function facturasUpdate(id, data) {
       irpf_pct = :irpf, serie = :serie, marca_id = :marca_id,
       descuento_tipo = :dtipo, descuento_valor = :dvalor,
       titulo_documento_override = :titulo_override,
+      idioma_documento = :idioma_doc,
       updated_at = datetime('now')
     WHERE id = :id
   `).run({
@@ -186,12 +219,19 @@ export function facturasUpdate(id, data) {
     ':dtipo': m.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(m.descuento_valor) || 0,
     ':titulo_override': tituloOverride,
+    ':idioma_doc': idiomaDoc,
   });
   if (m.modo_detallado) {
     const lineas = db.prepare('SELECT id FROM lineas_factura WHERE factura_id = ?').all([id]);
     for (const l of lineas) recalcularImporteLineaSiTieneSubs(l.id, 'factura');
   }
   recalcularTotalesFactura(id);
+  // v1.5.0 checkpoint 7: al salir de borrador, aplicar auto-descuento en el
+  // deposito del cliente si existe. Idempotente.
+  const estadoNuevo = m.estado ?? 'borrador';
+  if (estadoNuevo !== 'borrador') {
+    depositosAplicarSalidaPorFactura(id);
+  }
   return facturasGet(id);
 }
 
@@ -215,9 +255,16 @@ export function facturasDelete(id) {
 
 export function lineasFacturaList(factura_id) {
   const db = getDb();
-  return db.prepare(
-    'SELECT * FROM lineas_factura WHERE factura_id = ? ORDER BY orden ASC, id ASC',
-  ).all([factura_id]);
+  return db.prepare(`
+    SELECT lf.*,
+           p.codigo AS producto_codigo,
+           p.nombre_en AS nombre_en,
+           p.descripcion_en AS descripcion_en
+    FROM lineas_factura lf
+    LEFT JOIN productos p ON p.id = lf.producto_id
+    WHERE lf.factura_id = ?
+    ORDER BY lf.orden ASC, lf.id ASC
+  `).all([factura_id]);
 }
 
 export function lineasFacturaCreate(factura_id, data) {
@@ -231,8 +278,8 @@ export function lineasFacturaCreate(factura_id, data) {
   const precio = round2(data?.precio_unitario ?? data?.importe ?? 0);
   const importe = data?.importe != null ? round2(data.importe) : round2(cantidad * precio);
   const info = db.prepare(`
-    INSERT INTO lineas_factura (factura_id, orden, titulo, descripcion, cantidad, precio_unitario, importe, iva_pct, codigo, descuento_tipo, descuento_valor, diana_pct)
-    VALUES (:fid, :orden, :titulo, :desc, :cantidad, :precio, :importe, :ivapct, :codigo, :dtipo, :dvalor, :diana)
+    INSERT INTO lineas_factura (factura_id, orden, titulo, descripcion, cantidad, precio_unitario, importe, iva_pct, codigo, descuento_tipo, descuento_valor, diana_pct, producto_id)
+    VALUES (:fid, :orden, :titulo, :desc, :cantidad, :precio, :importe, :ivapct, :codigo, :dtipo, :dvalor, :diana, :prodid)
   `).run({
     ':fid': factura_id, ':orden': orden, ':titulo': data?.titulo ?? null,
     ':desc': data?.descripcion ?? '', ':cantidad': cantidad, ':precio': precio, ':importe': importe,
@@ -241,6 +288,7 @@ export function lineasFacturaCreate(factura_id, data) {
     ':dtipo': data?.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(data?.descuento_valor) || 0,
     ':diana': normalizeDianaPct(data?.diana_pct),
+    ':prodid': data?.producto_id ? Number(data.producto_id) : null,
   });
   recalcularTotalesFactura(factura_id);
   return db.prepare('SELECT * FROM lineas_factura WHERE id = ?').get([info.lastInsertRowid]);
@@ -259,7 +307,9 @@ export function lineasFacturaUpdate(linea_id, data) {
     UPDATE lineas_factura SET titulo = :titulo, descripcion = :desc,
       cantidad = :cantidad, precio_unitario = :precio, importe = :importe,
       iva_pct = :ivapct, codigo = :codigo, descuento_tipo = :dtipo,
-      descuento_valor = :dvalor, diana_pct = :diana WHERE id = :id
+      descuento_valor = :dvalor, diana_pct = :diana,
+      producto_id = :prodid
+    WHERE id = :id
   `).run({
     ':id': linea_id, ':titulo': m.titulo ?? null, ':desc': m.descripcion ?? '',
     ':cantidad': Number(m.cantidad) || 0, ':precio': round2(m.precio_unitario), ':importe': importe,
@@ -268,6 +318,7 @@ export function lineasFacturaUpdate(linea_id, data) {
     ':dtipo': m.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(m.descuento_valor) || 0,
     ':diana': normalizeDianaPct(m.diana_pct),
+    ':prodid': m.producto_id ? Number(m.producto_id) : null,
   });
   recalcularTotalesFactura(current.factura_id);
   return db.prepare('SELECT * FROM lineas_factura WHERE id = ?').get([linea_id]);

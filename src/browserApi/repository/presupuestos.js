@@ -38,9 +38,16 @@ export function presupuestosGet(id) {
   const db = getDb();
   const p = db.prepare('SELECT * FROM presupuestos WHERE id = ?').get([id]);
   if (!p) return null;
-  const lineas = db.prepare(
-    'SELECT * FROM lineas_presupuesto WHERE presupuesto_id = ? ORDER BY orden ASC, id ASC',
-  ).all([id]);
+  const lineas = db.prepare(`
+    SELECT lp.*,
+           pr.codigo AS producto_codigo,
+           pr.nombre_en AS nombre_en,
+           pr.descripcion_en AS descripcion_en
+    FROM lineas_presupuesto lp
+    LEFT JOIN productos pr ON pr.id = lp.producto_id
+    WHERE lp.presupuesto_id = ?
+    ORDER BY lp.orden ASC, lp.id ASC
+  `).all([id]);
   for (const l of lineas) {
     l.sublineas = db.prepare(
       'SELECT * FROM sublineas_presupuesto WHERE linea_id = ? ORDER BY orden ASC, id ASC',
@@ -61,6 +68,11 @@ export function presupuestosCreate(serie) {
   const yy = currentYear();
   const s = normalizeSerie(serie);
   const fecha = new Date().toISOString().slice(0, 10);
+
+  // v1.5.0 checkpoint 4: titulo default de empresa para presupuestos.
+  const empresa = db.prepare('SELECT * FROM empresas WHERE id = ?').get([empresaId]);
+  const tituloDefault = (empresa && empresa.titulo_default_presupuesto
+    && String(empresa.titulo_default_presupuesto).trim()) || null;
 
   return transaction(() => {
     let numero;
@@ -85,14 +97,17 @@ export function presupuestosCreate(serie) {
     const info = db.prepare(`
       INSERT INTO presupuestos (
         empresa_id, numero, serie, fecha, ciudad_emision, cliente_id, asunto,
-        iva_porcentaje, base_imponible, iva_importe, total, estado
+        iva_porcentaje, base_imponible, iva_importe, total, estado,
+        titulo_documento_override
       ) VALUES (
         :empresa_id, :numero, :serie, :fecha, :ciudad, NULL, NULL,
-        :iva, 0, 0, 0, 'borrador'
+        :iva, 0, 0, 0, 'borrador',
+        :titulo_override
       )
     `).run({
       ':empresa_id': empresaId, ':numero': numero, ':serie': s, ':fecha': fecha,
       ':ciudad': settings.ciudad_emision ?? null, ':iva': settings.iva_default ?? 21,
+      ':titulo_override': tituloDefault,
     });
     return { id: info.lastInsertRowid, numero };
   });
@@ -111,12 +126,21 @@ export function presupuestosUpdate(id, data) {
     return presupuestosGet(id);
   }
   const m = { ...current, ...data };
+  const tituloOverride =
+    typeof m.titulo_documento_override === 'string' && m.titulo_documento_override.trim()
+      ? m.titulo_documento_override.trim()
+      : null;
+  const idiomaDoc = m.idioma_documento === 'en' ? 'en'
+    : m.idioma_documento === 'es' ? 'es' : null;
   db.prepare(`
     UPDATE presupuestos SET
       fecha = :fecha, ciudad_emision = :ciudad, cliente_id = :cliente_id, asunto = :asunto,
       iva_porcentaje = :iva, iva_incluido = :iva_incluido, notas = :notas, estado = :estado,
       modo_detallado = :modo_detallado, serie = :serie, marca_id = :marca_id,
-      descuento_tipo = :dtipo, descuento_valor = :dvalor, updated_at = datetime('now')
+      descuento_tipo = :dtipo, descuento_valor = :dvalor,
+      titulo_documento_override = :titulo_override,
+      idioma_documento = :idioma_doc,
+      updated_at = datetime('now')
     WHERE id = :id
   `).run({
     ':id': id, ':fecha': m.fecha, ':ciudad': m.ciudad_emision ?? null,
@@ -128,6 +152,8 @@ export function presupuestosUpdate(id, data) {
     ':marca_id': m.marca_id ? Number(m.marca_id) : null,
     ':dtipo': m.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(m.descuento_valor) || 0,
+    ':titulo_override': tituloOverride,
+    ':idioma_doc': idiomaDoc,
   });
   if (m.modo_detallado) {
     const lineas = db.prepare('SELECT id FROM lineas_presupuesto WHERE presupuesto_id = ?').all([id]);
@@ -149,9 +175,16 @@ export function presupuestosDelete(id) {
 
 export function lineasPresupuestoList(presupuesto_id) {
   const db = getDb();
-  return db.prepare(
-    'SELECT * FROM lineas_presupuesto WHERE presupuesto_id = ? ORDER BY orden ASC, id ASC',
-  ).all([presupuesto_id]);
+  return db.prepare(`
+    SELECT lp.*,
+           pr.codigo AS producto_codigo,
+           pr.nombre_en AS nombre_en,
+           pr.descripcion_en AS descripcion_en
+    FROM lineas_presupuesto lp
+    LEFT JOIN productos pr ON pr.id = lp.producto_id
+    WHERE lp.presupuesto_id = ?
+    ORDER BY lp.orden ASC, lp.id ASC
+  `).all([presupuesto_id]);
 }
 
 export function lineasPresupuestoCreate(presupuesto_id, data) {
@@ -167,8 +200,8 @@ export function lineasPresupuestoCreate(presupuesto_id, data) {
   const precio = round2(data?.precio_unitario ?? data?.importe ?? 0);
   const importe = data?.importe != null ? round2(data.importe) : round2(cantidad * precio);
   const info = db.prepare(`
-    INSERT INTO lineas_presupuesto (presupuesto_id, orden, titulo, descripcion, cantidad, precio_unitario, importe, iva_pct, codigo, descuento_tipo, descuento_valor)
-    VALUES (:pid, :orden, :titulo, :desc, :cantidad, :precio, :importe, :ivapct, :codigo, :dtipo, :dvalor)
+    INSERT INTO lineas_presupuesto (presupuesto_id, orden, titulo, descripcion, cantidad, precio_unitario, importe, iva_pct, codigo, descuento_tipo, descuento_valor, producto_id)
+    VALUES (:pid, :orden, :titulo, :desc, :cantidad, :precio, :importe, :ivapct, :codigo, :dtipo, :dvalor, :prodid)
   `).run({
     ':pid': presupuesto_id, ':orden': orden, ':titulo': data?.titulo ?? null,
     ':desc': data?.descripcion ?? '', ':cantidad': cantidad, ':precio': precio, ':importe': importe,
@@ -176,6 +209,7 @@ export function lineasPresupuestoCreate(presupuesto_id, data) {
     ':codigo': data?.codigo ? String(data.codigo).trim() : null,
     ':dtipo': data?.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(data?.descuento_valor) || 0,
+    ':prodid': data?.producto_id ? Number(data.producto_id) : null,
   });
   recalcularTotalesPresupuesto(presupuesto_id);
   return db.prepare('SELECT * FROM lineas_presupuesto WHERE id = ?').get([info.lastInsertRowid]);
@@ -195,7 +229,8 @@ export function lineasPresupuestoUpdate(linea_id, data) {
   db.prepare(`
     UPDATE lineas_presupuesto SET titulo = :titulo, descripcion = :desc,
       cantidad = :cantidad, precio_unitario = :precio, importe = :importe,
-      iva_pct = :ivapct, codigo = :codigo, descuento_tipo = :dtipo, descuento_valor = :dvalor
+      iva_pct = :ivapct, codigo = :codigo, descuento_tipo = :dtipo, descuento_valor = :dvalor,
+      producto_id = :prodid
     WHERE id = :id
   `).run({
     ':id': linea_id, ':titulo': m.titulo ?? null, ':desc': m.descripcion ?? '',
@@ -204,6 +239,7 @@ export function lineasPresupuestoUpdate(linea_id, data) {
     ':codigo': m.codigo ? String(m.codigo).trim() : null,
     ':dtipo': m.descuento_tipo === 'eur' ? 'eur' : 'pct',
     ':dvalor': Number(m.descuento_valor) || 0,
+    ':prodid': m.producto_id ? Number(m.producto_id) : null,
   });
   recalcularTotalesPresupuesto(current.presupuesto_id);
   return db.prepare('SELECT * FROM lineas_presupuesto WHERE id = ?').get([linea_id]);

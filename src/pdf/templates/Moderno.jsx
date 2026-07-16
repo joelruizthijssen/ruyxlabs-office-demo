@@ -243,7 +243,7 @@ function Moderno({ tipo, doc, lineas, cliente, settings }) {
         </View>
 
         <View style={styles.clienteBlock} fixed>
-          <Text style={styles.clienteHeader}>Cliente</Text>
+          <Text style={styles.clienteHeader}>{v.L.cliente_header.replace(':', '')}</Text>
           <ClienteContent
             tipo={tipo}
             cliente={cliente}
@@ -256,11 +256,11 @@ function Moderno({ tipo, doc, lineas, cliente, settings }) {
         <View style={[styles.tableHeaderTopLine, { backgroundColor: v.brandColor }]} fixed />
         <View style={styles.tableHeader} fixed>
           {tipo === 'factura' ? (
-            <FacturaTableHeaderCells styles={styles} tableHeaderLeft={v.tableHeaderLeft} />
+            <FacturaTableHeaderCells styles={styles} tableHeaderLeft={v.tableHeaderLeft} L={v.L} />
           ) : (
             <>
               <Text style={styles.thDesc}>{v.tableHeaderLeft}</Text>
-              <Text style={styles.thImp}>IMPORTE</Text>
+              <Text style={styles.thImp}>{v.L.importe}</Text>
             </>
           )}
         </View>

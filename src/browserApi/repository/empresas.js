@@ -91,6 +91,12 @@ export function empresasUpdate(id, data) {
       iva_default = :iva,
       ciudad_emision = :ciudad_emision,
       tipo_negocio = :tipo_negocio,
+      titulo_default_factura = :tdf,
+      titulo_default_proforma = :tdp,
+      titulo_default_contado = :tdc,
+      titulo_default_rectificativa = :tdr,
+      titulo_default_presupuesto = :tdpr,
+      mostrar_codigo_en_lineas = :mostrar_codigo,
       actualizado_at = datetime('now')
     WHERE id = :id
   `).run({
@@ -113,6 +119,12 @@ export function empresasUpdate(id, data) {
     ':ciudad_emision': m.ciudad_emision ?? null,
     ':tipo_negocio': ['servicios', 'productos', 'mixto'].includes(m.tipo_negocio)
       ? m.tipo_negocio : 'servicios',
+    ':tdf': (m.titulo_default_factura || '').trim() || null,
+    ':tdp': (m.titulo_default_proforma || '').trim() || null,
+    ':tdc': (m.titulo_default_contado || '').trim() || null,
+    ':tdr': (m.titulo_default_rectificativa || '').trim() || null,
+    ':tdpr': (m.titulo_default_presupuesto || '').trim() || null,
+    ':mostrar_codigo': m.mostrar_codigo_en_lineas ? 1 : 0,
   });
   return empresasGet(id);
 }

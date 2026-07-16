@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Users, FileText, Receipt, Calculator, Settings, Wallet, Repeat, Package, Bell, TrendingUp, Truck, Handshake, BookOpen, ClipboardList } from 'lucide-react';
+import { Home, Users, FileText, Receipt, Calculator, Settings, Wallet, Repeat, Package, Bell, TrendingUp, Truck, Handshake, BookOpen, ClipboardList, Warehouse } from 'lucide-react';
 import AcercaDeModal from './AcercaDeModal.jsx';
 import EmpresaSelector from './EmpresaSelector.jsx';
 import { APP_TAGLINE, APP_VERSION } from '../utils/appInfo.js';
@@ -33,6 +33,7 @@ const items = [
   { to: '/gastos',       label: 'Gastos',       icon: Wallet,     key: 'gastos' },
   { to: '/proveedores',  label: 'Proveedores',  icon: Truck,      key: 'proveedores' },
   { to: '/pedidos',      label: 'Pedidos',      icon: ClipboardList, key: 'pedidos' },
+  { to: '/depositos',    label: 'Depósitos',    icon: Warehouse,     key: 'depositos' },
   { to: '/recurrencias', label: 'Recurrencias', icon: Repeat,     key: 'recurrencias' },
   { to: '/notificaciones', label: 'Notificaciones', icon: Bell,   key: 'notificaciones' },
   { to: '/fiscal',       label: 'Resumen fiscal', icon: Calculator, key: 'fiscal' },

@@ -60,6 +60,14 @@ const FIELDS = [
   'tarifa_compra_2_label',
   'tarifa_compra_3_label',
   'tarifa_compra_4_label',
+  // v1.5.0: titulos custom de cada tipo de documento por empresa.
+  'titulo_default_factura',
+  'titulo_default_proforma',
+  'titulo_default_contado',
+  'titulo_default_rectificativa',
+  'titulo_default_presupuesto',
+  // v1.5.0: toggle prependir codigo producto en lineas del PDF.
+  'mostrar_codigo_en_lineas',
 ];
 
 // Campos array (series). Se manejan aparte: en pickEditable se leen de
@@ -1336,6 +1344,89 @@ function Ajustes() {
                 />
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* v1.5.0: titulos default por empresa + toggle codigo producto. */}
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 mb-2">
+            Títulos de documento
+          </h2>
+          <p className="text-sm text-slate-500 mb-5">
+            Renombra el título que aparece en el PDF de cada tipo de
+            documento cuando se crea. Útil para diferenciar entre empresas
+            (p.&nbsp;ej. una empresa usa "Confirmación de Pedido" para las
+            proformas y otra "Factura Proforma"). Dejar vacío mantiene el
+            título por defecto. Sigue siendo editable en cada documento.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Título de factura</label>
+              <input
+                className={inputCls}
+                value={form.titulo_default_factura || ''}
+                onChange={(e) => setField('titulo_default_factura', e.target.value)}
+                placeholder="FACTURA"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Título de proforma</label>
+              <input
+                className={inputCls}
+                value={form.titulo_default_proforma || ''}
+                onChange={(e) => setField('titulo_default_proforma', e.target.value)}
+                placeholder="FACTURA PROFORMA"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Título de venta al contado</label>
+              <input
+                className={inputCls}
+                value={form.titulo_default_contado || ''}
+                onChange={(e) => setField('titulo_default_contado', e.target.value)}
+                placeholder="CONTADO"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Título de rectificativa</label>
+              <input
+                className={inputCls}
+                value={form.titulo_default_rectificativa || ''}
+                onChange={(e) => setField('titulo_default_rectificativa', e.target.value)}
+                placeholder="FACTURA RECTIFICATIVA"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Título de presupuesto</label>
+              <input
+                className={inputCls}
+                value={form.titulo_default_presupuesto || ''}
+                onChange={(e) => setField('titulo_default_presupuesto', e.target.value)}
+                placeholder="PRESUPUESTO"
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-slate-200 pt-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                checked={!!form.mostrar_codigo_en_lineas}
+                onChange={(e) => setField('mostrar_codigo_en_lineas', e.target.checked ? 1 : 0)}
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-800">
+                  Mostrar código del producto en las líneas del PDF
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  Cuando esté activo, el código del producto (si la línea lo
+                  tiene) se prepende al concepto en formato{' '}
+                  <span className="font-mono">[COD-123]&nbsp;Nombre</span>.
+                  Útil para catálogos con referencias.
+                </div>
+              </div>
+            </label>
           </div>
         </section>
 

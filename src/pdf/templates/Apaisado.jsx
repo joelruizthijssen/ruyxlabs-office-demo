@@ -152,7 +152,7 @@ function Apaisado({ tipo, doc, lineas, cliente, settings }) {
             <EmisorBlock s={v.s} dirLine1={v.dirLine1} dirLine2={v.dirLine2} styles={styles} firmaUrl={v.firmaUrl} />
           </View>
           <View style={styles.clienteBlock}>
-            <Text style={styles.clienteHeader}>Cliente</Text>
+            <Text style={styles.clienteHeader}>{v.L.cliente_header.replace(':', '')}</Text>
             <ClienteContent
               tipo={tipo}
               cliente={cliente}
@@ -171,11 +171,11 @@ function Apaisado({ tipo, doc, lineas, cliente, settings }) {
           <View style={styles.bodyCol}>
             <View style={styles.tableHeader}>
               {tipo === 'factura' ? (
-                <FacturaTableHeaderCells styles={styles} tableHeaderLeft={v.tableHeaderLeft} />
+                <FacturaTableHeaderCells styles={styles} tableHeaderLeft={v.tableHeaderLeft} L={v.L} />
               ) : (
                 <>
                   <Text style={styles.thDesc}>{v.tableHeaderLeft}</Text>
-                  <Text style={styles.thImp}>IMPORTE</Text>
+                  <Text style={styles.thImp}>{v.L.importe}</Text>
                 </>
               )}
             </View>

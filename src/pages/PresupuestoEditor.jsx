@@ -58,6 +58,9 @@ function PresupuestoEditor() {
     marca_id: null,
     descuento_tipo: 'pct',
     descuento_valor: 0,
+    // v1.5.0: idioma del PDF y titulo custom (paridad con FacturaEditor).
+    titulo_documento_override: '',
+    idioma_documento: null,
   });
   const [cabOriginal, setCabOriginal] = useState(cab);
   const [marcas, setMarcas] = useState([]);
@@ -119,6 +122,8 @@ function PresupuestoEditor() {
         marca_id: p.marca_id ?? null,
         descuento_tipo: p.descuento_tipo === 'eur' ? 'eur' : 'pct',
         descuento_valor: Number(p.descuento_valor) || 0,
+        titulo_documento_override: p.titulo_documento_override || '',
+        idioma_documento: p.idioma_documento || null,
       };
       // Descuento por defecto del cliente (modo 'total'): autoaplica a la
       // cabecera. Modo 'linea' no toca lineas existentes; solo las nuevas
@@ -779,6 +784,32 @@ function PresupuestoEditor() {
                   onChange={(e) => setCabField('ciudad_emision', e.target.value)}
                 />
               </div>
+              <div className="col-span-2">
+                <label className={labelCls}>Título del documento (opcional)</label>
+                <input
+                  className={inputCls}
+                  value={cab.titulo_documento_override || ''}
+                  disabled={bloqueado}
+                  placeholder="p.ej. Oferta comercial, Cotización…"
+                  onChange={(e) => setCabField('titulo_documento_override', e.target.value)}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Si lo dejas vacío se usa "PRESUPUESTO". Aparece en el PDF y listado.
+                </p>
+              </div>
+              <div className="col-span-2">
+                <label className={labelCls}>Idioma del PDF</label>
+                <select
+                  className={inputCls + ' bg-white'}
+                  value={cab.idioma_documento || ''}
+                  disabled={bloqueado}
+                  onChange={(e) => setCabField('idioma_documento', e.target.value || null)}
+                >
+                  <option value="">Auto (según cliente o empresa)</option>
+                  <option value="es">Español</option>
+                  <option value="en">Inglés</option>
+                </select>
+              </div>
               {marcas.length > 0 && (
                 <div className="col-span-2">
                   <label className={labelCls}>Marca</label>
@@ -937,6 +968,7 @@ function PresupuestoEditor() {
                             iva_pct: p.iva_pct == null ? l.iva_pct : p.iva_pct,
                             importe: p.precio_unitario != null && p.precio_unitario !== 0
                               ? p.precio_unitario : l.importe,
+                            producto_id: p.id || null,
                           })}
                         />
                         <div className="shrink-0">

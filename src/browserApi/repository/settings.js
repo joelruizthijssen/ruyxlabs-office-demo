@@ -63,6 +63,12 @@ export function getSettings() {
     tarifa_compra_2_label: empresa.tarifa_compra_2_label,
     tarifa_compra_3_label: empresa.tarifa_compra_3_label,
     tarifa_compra_4_label: empresa.tarifa_compra_4_label,
+    titulo_default_factura: empresa.titulo_default_factura,
+    titulo_default_proforma: empresa.titulo_default_proforma,
+    titulo_default_contado: empresa.titulo_default_contado,
+    titulo_default_rectificativa: empresa.titulo_default_rectificativa,
+    titulo_default_presupuesto: empresa.titulo_default_presupuesto,
+    mostrar_codigo_en_lineas: empresa.mostrar_codigo_en_lineas ? 1 : 0,
     // En web demo no hay ficheros de logo/firma/membrete. Siempre null.
     logo_data_url: null,
     firma_data_url: null,
@@ -144,6 +150,12 @@ export function settingsUpdate(data) {
       tarifa_compra_2_label = :tcl2,
       tarifa_compra_3_label = :tcl3,
       tarifa_compra_4_label = :tcl4,
+      titulo_default_factura = :tdf,
+      titulo_default_proforma = :tdp,
+      titulo_default_contado = :tdc,
+      titulo_default_rectificativa = :tdr,
+      titulo_default_presupuesto = :tdpr,
+      mostrar_codigo_en_lineas = :mostrar_codigo,
       actualizado_at = datetime('now')
     WHERE id = :id
   `).run({
@@ -180,6 +192,12 @@ export function settingsUpdate(data) {
     ':tcl2': (m.tarifa_compra_2_label || '').trim() || null,
     ':tcl3': (m.tarifa_compra_3_label || '').trim() || null,
     ':tcl4': (m.tarifa_compra_4_label || '').trim() || null,
+    ':tdf': (m.titulo_default_factura || '').trim() || null,
+    ':tdp': (m.titulo_default_proforma || '').trim() || null,
+    ':tdc': (m.titulo_default_contado || '').trim() || null,
+    ':tdr': (m.titulo_default_rectificativa || '').trim() || null,
+    ':tdpr': (m.titulo_default_presupuesto || '').trim() || null,
+    ':mostrar_codigo': m.mostrar_codigo_en_lineas ? 1 : 0,
   });
 
   return getSettings();

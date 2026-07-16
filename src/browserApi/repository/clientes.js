@@ -112,7 +112,7 @@ export function clientesCreate(data) {
       iban, condiciones_pago, irpf_pct_default, recargo_equivalencia,
       pais, intracomunitario, vat_number,
       descuento_pct_default, descuento_aplicar, tarifa_aplicar,
-      contacto_persona, notas, observaciones_internas
+      contacto_persona, notas, observaciones_internas, idioma_documentos
     ) VALUES (
       :empresa_id, :tipo, :nombre, :nombre_comercial, :nif,
       :direccion, :ciudad, :cp, :provincia,
@@ -120,7 +120,7 @@ export function clientesCreate(data) {
       :iban, :condiciones_pago, :irpf_pct_default, :recargo_equivalencia,
       :pais, :intracomunitario, :vat_number,
       :descuento_pct_default, :descuento_aplicar, :tarifa_aplicar,
-      :contacto_persona, :notas, :observaciones_internas
+      :contacto_persona, :notas, :observaciones_internas, :idioma_doc
     )
   `).run({
     ':empresa_id': empresaActivaId(),
@@ -150,6 +150,8 @@ export function clientesCreate(data) {
     ':contacto_persona': data.contacto_persona ?? null,
     ':notas': data.notas ?? null,
     ':observaciones_internas': data.observaciones_internas ?? null,
+    ':idioma_doc': data.idioma_documentos === 'en' ? 'en'
+      : data.idioma_documentos === 'es' ? 'es' : null,
   });
   return clientesGet(info.lastInsertRowid);
 }
@@ -186,6 +188,7 @@ export function clientesUpdate(id, data) {
       contacto_persona = :contacto_persona,
       notas = :notas,
       observaciones_internas = :observaciones_internas,
+      idioma_documentos = :idioma_doc,
       updated_at = datetime('now')
     WHERE id = :id
   `).run({
@@ -216,6 +219,8 @@ export function clientesUpdate(id, data) {
     ':contacto_persona': merged.contacto_persona ?? null,
     ':notas': merged.notas ?? null,
     ':observaciones_internas': merged.observaciones_internas ?? null,
+    ':idioma_doc': merged.idioma_documentos === 'en' ? 'en'
+      : merged.idioma_documentos === 'es' ? 'es' : null,
   });
   return clientesGet(id);
 }

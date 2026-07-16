@@ -22,6 +22,7 @@ import PedidoEditor from './pages/PedidoEditor.jsx';
 import Recurrencias from './pages/Recurrencias.jsx';
 import Productos from './pages/Productos.jsx';
 import ProductoDetalle from './pages/ProductoDetalle.jsx';
+import Depositos from './pages/Depositos.jsx';
 import MarcasInforme from './pages/MarcasInforme.jsx';
 import CuentaDiana from './pages/CuentaDiana.jsx';
 import Notificaciones from './pages/Notificaciones.jsx';
@@ -129,6 +130,7 @@ function App() {
               <Route path="/notificaciones" element={<Notificaciones />} />
               <Route path="/productos" element={<Productos />} />
               <Route path="/productos/:id" element={<ProductoDetalle />} />
+              <Route path="/depositos" element={<Depositos />} />
               <Route path="/marcas" element={<MarcasInforme />} />
               <Route path="/diana" element={<CuentaDiana />} />
               <Route path="/fiscal" element={<Fiscal />} />

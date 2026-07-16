@@ -29,6 +29,9 @@ const emptyForm = {
   unidad: 'ud',
   marca_id: null,
   proveedor: '',
+  // v1.5.0: traducciones EN (opcionales). Usadas en PDF cuando idioma='en'.
+  nombre_en: '',
+  descripcion_en: '',
 };
 
 // v1.2.24: nombres de las 4 tarifas. Pedidos por la madre. Si en el futuro
@@ -137,6 +140,8 @@ function Productos() {
       unidad: p.unidad || 'ud',
       marca_id: p.marca_id || null,
       proveedor: p.proveedor || '',
+      nombre_en: p.nombre_en || '',
+      descripcion_en: p.descripcion_en || '',
     });
   }
   function cerrar() { setEditing(null); }
@@ -166,6 +171,8 @@ function Productos() {
         unidad: editing.unidad || 'ud',
         marca_id: editing.marca_id || null,
         proveedor: editing.proveedor || '',
+        nombre_en: (editing.nombre_en || '').trim() || null,
+        descripcion_en: (editing.descripcion_en || '').trim() || null,
       };
       const res = editing.id
         ? await window.api.productos.update(editing.id, payload)
@@ -362,6 +369,28 @@ function Productos() {
                   value={editing.descripcion}
                   onChange={(e) => setEditing({ ...editing, descripcion: e.target.value })}
                 />
+              </div>
+              {/* v1.5.0: traducciones al ingles. Se usan en el PDF cuando el
+                  documento (o el cliente) tiene idioma_documento='en'. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Nombre (Inglés)</label>
+                  <input
+                    className={inputCls}
+                    placeholder="English name (opcional)"
+                    value={editing.nombre_en || ''}
+                    onChange={(e) => setEditing({ ...editing, nombre_en: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Descripción (Inglés)</label>
+                  <input
+                    className={inputCls}
+                    placeholder="English description (opcional)"
+                    value={editing.descripcion_en || ''}
+                    onChange={(e) => setEditing({ ...editing, descripcion_en: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

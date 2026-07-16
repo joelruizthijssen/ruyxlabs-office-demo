@@ -31,6 +31,8 @@ const emptyForm = {
   tarifa_aplicar: 0,
   notas: '',
   observaciones_internas: '',
+  // v1.5.0: idioma preferido para los documentos.
+  idioma_documentos: null,
 };
 
 function ProveedorFormModal({ proveedor, onSaved, onCancel }) {
@@ -304,6 +306,18 @@ function ProveedorFormModal({ proveedor, onSaved, onCancel }) {
                   value={form.observaciones_internas || ''}
                   onChange={(e) => setField('observaciones_internas', e.target.value)}
                 />
+              </div>
+              <div className="col-span-2">
+                <label className={labelCls}>Idioma preferido para los documentos</label>
+                <select
+                  className={inputCls + ' bg-white'}
+                  value={form.idioma_documentos || ''}
+                  onChange={(e) => setField('idioma_documentos', e.target.value || null)}
+                >
+                  <option value="">Automático (usar el default de la empresa)</option>
+                  <option value="es">Español</option>
+                  <option value="en">Inglés</option>
+                </select>
               </div>
             </div>
           </section>

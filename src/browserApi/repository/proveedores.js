@@ -24,13 +24,13 @@ export function proveedoresCreate(data) {
       email, telefono, telefono_movil, web,
       direccion, cp, ciudad, provincia, pais,
       iban, condiciones_pago, irpf_pct_default, iva_pct_default,
-      tarifa_aplicar, notas, observaciones_internas
+      tarifa_aplicar, notas, observaciones_internas, idioma_documentos
     ) VALUES (
       :empresa_id, :nombre, :nif, :contacto_persona,
       :email, :telefono, :telefono_movil, :web,
       :direccion, :cp, :ciudad, :provincia, :pais,
       :iban, :condiciones_pago, :irpf_pct_default, :iva_pct_default,
-      :tarifa_aplicar, :notas, :observaciones_internas
+      :tarifa_aplicar, :notas, :observaciones_internas, :idioma_doc
     )
   `).run({
     ':empresa_id': empresaActivaId(),
@@ -54,6 +54,8 @@ export function proveedoresCreate(data) {
     ':tarifa_aplicar': Number(data?.tarifa_aplicar) || 0,
     ':notas': data?.notas ?? null,
     ':observaciones_internas': data?.observaciones_internas ?? null,
+    ':idioma_doc': data?.idioma_documentos === 'en' ? 'en'
+      : data?.idioma_documentos === 'es' ? 'es' : null,
   });
   return proveedoresGet(info.lastInsertRowid);
 }
@@ -72,6 +74,7 @@ export function proveedoresUpdate(id, data) {
       irpf_pct_default = :irpf_pct_default, iva_pct_default = :iva_pct_default,
       tarifa_aplicar = :tarifa_aplicar,
       notas = :notas, observaciones_internas = :observaciones_internas,
+      idioma_documentos = :idioma_doc,
       updated_at = datetime('now') WHERE id = :id
   `).run({
     ':id': id, ':nombre': (m.nombre || '').trim() || 'Proveedor sin nombre',
@@ -87,6 +90,8 @@ export function proveedoresUpdate(id, data) {
       ? null : Number(m.iva_pct_default),
     ':tarifa_aplicar': Number(m.tarifa_aplicar) || 0,
     ':notas': m.notas ?? null, ':observaciones_internas': m.observaciones_internas ?? null,
+    ':idioma_doc': m.idioma_documentos === 'en' ? 'en'
+      : m.idioma_documentos === 'es' ? 'es' : null,
   });
   return proveedoresGet(id);
 }

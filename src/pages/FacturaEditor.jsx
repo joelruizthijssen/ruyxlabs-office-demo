@@ -78,6 +78,9 @@ function FacturaEditor() {
     // v1.4.0: nombre custom del documento. Cuando NO es vacio sustituye el
     // titulo por defecto ("PROFORMA", "FACTURA", etc.) en el PDF y listado.
     titulo_documento_override: '',
+    // v1.5.0: idioma del PDF de este documento. NULL = usar el default
+    // (idioma preferido del cliente > idioma global de la empresa > 'es').
+    idioma_documento: null,
   });
   const [cabOriginal, setCabOriginal] = useState(cab);
   const [marcas, setMarcas] = useState([]);
@@ -154,6 +157,7 @@ function FacturaEditor() {
         proforma_origen_id: f.proforma_origen_id || null,
         convertida_a: f.convertida_a || null,
         titulo_documento_override: f.titulo_documento_override || '',
+        idioma_documento: f.idioma_documento || null,
       };
       // Autorrelleno de IRPF al cargar: si la factura es borrador, no tiene
       // IRPF puesto todavia, y el cliente tiene un default > 0, aplicarlo.
@@ -968,6 +972,26 @@ function FacturaEditor() {
                 </p>
               </div>
             )}
+            {/* v1.5.0: idioma del PDF. Auto = usa el idioma preferido del
+                cliente si esta configurado; si no, el idioma de la empresa. */}
+            <div>
+              <label className={labelCls}>Idioma del PDF</label>
+              <select
+                className={inputCls + ' bg-white'}
+                value={cab.idioma_documento || ''}
+                disabled={bloqueada}
+                onChange={(e) => setCabField('idioma_documento', e.target.value || null)}
+              >
+                <option value="">Auto (según cliente o empresa)</option>
+                <option value="es">Español</option>
+                <option value="en">Inglés</option>
+              </select>
+              <p className="text-xs text-slate-500 mt-1">
+                Cambia el idioma de los títulos y textos del PDF (INVOICE,
+                DESCRIPTION, VAT, TOTAL…). Los productos con traducción
+                también salen en inglés.
+              </p>
+            </div>
             {marcas.length > 0 && (
               <div>
                 <label className={labelCls}>Marca</label>
@@ -1302,6 +1326,9 @@ function FacturaEditor() {
                               importe: precioFinal !== 0
                                 ? Math.round(precioFinal * cant * 100) / 100
                                 : l.importe,
+                              // v1.5.0: guardar producto_id para auto-descuento
+                              // de deposito + traducciones nombre_en/desc_en.
+                              producto_id: p.id || null,
                             });
                           }}
                         />

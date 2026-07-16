@@ -160,6 +160,14 @@ const CONTRACT = {
   backup: { export: RETURN_OK, import: RETURN_OK },
   holded: { saveXlsx: RETURN_OK },
   facturae: { saveXml: RETURN_OK },
+  depositos: {
+    list: RETURN_ARRAY, get: RETURN_NULL,
+    create: RETURN_OK, update: RETURN_OK, delete: RETURN_OK,
+    stockActual: RETURN_ARRAY,
+    movimientosList: RETURN_ARRAY,
+    movimientosCreate: RETURN_OK,
+    movimientosDelete: RETURN_OK,
+  },
 };
 
 function _stubReturnValue(shape) {
@@ -229,6 +237,7 @@ export async function initBrowserApi() {
     import('./mount/productosPedidos.js'),
     import('./mount/informes.js'),
     import('./mount/socios.js'),
+    import('./mount/depositos.js'),
     import('./mount/extras.js'),
   ]);
   for (const m of mounts) m.default();

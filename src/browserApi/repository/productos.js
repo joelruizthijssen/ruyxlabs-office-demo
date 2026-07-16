@@ -64,13 +64,15 @@ export function productosCreate(data) {
       precio_unitario, precio_compra, precio_venta, iva_pct, unidad,
       marca_id, proveedor,
       tarifa_1, tarifa_2, tarifa_3, tarifa_4,
-      precio_compra_1, precio_compra_2, precio_compra_3, precio_compra_4
+      precio_compra_1, precio_compra_2, precio_compra_3, precio_compra_4,
+      nombre_en, descripcion_en
     ) VALUES (
       :empresa_id, :codigo, :nombre, :descripcion,
       :precio, :compra, :venta, :iva, :unidad,
       :marca_id, :proveedor,
       :t1, :t2, :t3, :t4,
-      :pc1, :pc2, :pc3, :pc4
+      :pc1, :pc2, :pc3, :pc4,
+      :nombre_en, :descripcion_en
     )
   `).run({
     ':empresa_id': empresaActivaId(),
@@ -88,6 +90,8 @@ export function productosCreate(data) {
     ':pc2': Number(data?.precio_compra_2) || 0,
     ':pc3': Number(data?.precio_compra_3) || 0,
     ':pc4': Number(data?.precio_compra_4) || 0,
+    ':nombre_en': (data?.nombre_en || '').trim() || null,
+    ':descripcion_en': (data?.descripcion_en || '').trim() || null,
   });
   return productosGet(info.lastInsertRowid);
 }
@@ -108,6 +112,7 @@ export function productosUpdate(id, data) {
       iva_pct = :iva, unidad = :unidad, marca_id = :marca_id, proveedor = :proveedor,
       tarifa_1 = :t1, tarifa_2 = :t2, tarifa_3 = :t3, tarifa_4 = :t4,
       precio_compra_1 = :pc1, precio_compra_2 = :pc2, precio_compra_3 = :pc3, precio_compra_4 = :pc4,
+      nombre_en = :nombre_en, descripcion_en = :descripcion_en,
       actualizado_at = datetime('now') WHERE id = :id
   `).run({
     ':id': id, ':codigo': codigoNuevo,
@@ -122,6 +127,8 @@ export function productosUpdate(id, data) {
     ':t3': Number(m.tarifa_3) || 0, ':t4': Number(m.tarifa_4) || 0,
     ':pc1': Number(m.precio_compra_1) || 0, ':pc2': Number(m.precio_compra_2) || 0,
     ':pc3': Number(m.precio_compra_3) || 0, ':pc4': Number(m.precio_compra_4) || 0,
+    ':nombre_en': (m.nombre_en || '').trim() || null,
+    ':descripcion_en': (m.descripcion_en || '').trim() || null,
   });
   return productosGet(id);
 }
