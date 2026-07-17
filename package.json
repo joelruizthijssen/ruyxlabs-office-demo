@@ -1,7 +1,7 @@
 {
   "name": "ruyx-office-demo",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.5.3",
   "description": "Demo web interactiva de Ruyx Office. SQLite en el navegador (sql.js) con persistencia efímera (IndexedDB, TTL 24h).",
   "author": {
     "name": "RuyxLabs",
