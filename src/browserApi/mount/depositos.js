@@ -4,7 +4,7 @@ import { overrideApi } from '../index.js';
 import {
   depositosList, depositosGet, depositosCreate, depositosUpdate, depositosDelete,
   depositosStockActual, depositosMovimientosList,
-  depositosMovimientosCreate, depositosMovimientosDelete,
+  depositosMovimientosCreate, depositosMovimientosUpdate, depositosMovimientosDelete,
 } from '../repository/depositos.js';
 
 export default function mount() {
@@ -17,6 +17,7 @@ export default function mount() {
     stockActual: (id) => depositosStockActual(id),
     movimientosList: (id) => depositosMovimientosList(id),
     movimientosCreate: (data) => depositosMovimientosCreate(data),
+    movimientosUpdate: (id, data) => depositosMovimientosUpdate(id, data),
     movimientosDelete: (id) => depositosMovimientosDelete(id),
   });
 }

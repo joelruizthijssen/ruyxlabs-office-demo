@@ -133,7 +133,10 @@ export function gastosList({ anio, trimestre, desde, hasta, proveedorId } = {}) 
 
 export function gastosGet(id) {
   const db = getDb();
-  const g = db.prepare('SELECT * FROM gastos WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
+  const g = db.prepare(`SELECT * FROM gastos WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!g) return null;
   const lineas = db.prepare(
     'SELECT * FROM gasto_lineas WHERE gasto_id = ? ORDER BY orden ASC, id ASC',
@@ -247,9 +250,11 @@ export function gastosUpdate(id, data) {
 
 export function gastosDelete(id) {
   const db = getDb();
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
   const info = db.prepare(
-    "UPDATE gastos SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
-  ).run([id]);
+    `UPDATE gastos SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL${sc.sql}`,
+  ).run([id, ...sc.params]);
   return { ok: info.changes > 0 };
 }
 

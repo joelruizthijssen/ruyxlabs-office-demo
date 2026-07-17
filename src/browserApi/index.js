@@ -166,6 +166,7 @@ const CONTRACT = {
     stockActual: RETURN_ARRAY,
     movimientosList: RETURN_ARRAY,
     movimientosCreate: RETURN_OK,
+    movimientosUpdate: RETURN_OK,
     movimientosDelete: RETURN_OK,
   },
 };

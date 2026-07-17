@@ -7,11 +7,13 @@
 //     rapida + PDF hoja de stock.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Warehouse, Plus, Trash2, Download, ArrowLeft } from 'lucide-react';
+import { Warehouse, Plus, Trash2, Download, ArrowLeft, Pencil, ChevronDown, ChevronRight, Check, X } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { formatFechaES, formatEUR } from '../utils/format.js';
+import { confirmDialog } from '../utils/confirmDialog.js';
 import { HojaStockPDF } from '../pdf/HojaStockPDF.jsx';
 import { useToast } from '../components/Toast.jsx';
+import ProductoAutocomplete from '../components/ProductoAutocomplete.jsx';
 import { APP_NAME, APP_VERSION } from '../utils/appInfo.js';
 
 const inputCls =
@@ -95,6 +97,7 @@ function DepositoForm({ initial, clientes, onSaved, onCancel }) {
 
 function EntradaRapidaForm({ depositoId, productos, onSaved, onCancel }) {
   const [productoId, setProductoId] = useState('');
+  const [productoTexto, setProductoTexto] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [precio, setPrecio] = useState('');
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
@@ -103,6 +106,7 @@ function EntradaRapidaForm({ depositoId, productos, onSaved, onCancel }) {
   const toast = useToast();
 
   async function guardar() {
+    if (!productoId) { toast.error('Elige un producto del catálogo'); return; }
     const c = Number(cantidad);
     if (!Number.isFinite(c) || c <= 0) { toast.error('Cantidad debe ser > 0'); return; }
     setSaving(true);
@@ -112,7 +116,7 @@ function EntradaRapidaForm({ depositoId, productos, onSaved, onCancel }) {
         deposito_id: depositoId,
         tipo: 'entrada',
         fecha,
-        producto_id: productoId ? Number(productoId) : null,
+        producto_id: Number(productoId),
         codigo: p?.codigo || null,
         concepto: p?.nombre || null,
         cantidad_signed: c,
@@ -131,21 +135,18 @@ function EntradaRapidaForm({ depositoId, productos, onSaved, onCancel }) {
       <h4 className="text-sm font-semibold text-slate-800 mb-3">Añadir entrada al depósito</h4>
       <div className="grid grid-cols-4 gap-3">
         <div className="col-span-2">
-          <label className={labelCls}>Producto *</label>
-          <select className={inputCls + ' bg-white'} value={productoId}
-            onChange={(e) => {
-              setProductoId(e.target.value);
-              const p = productos.find((x) => x.id === Number(e.target.value));
-              if (p) setPrecio(String(p.precio_compra || p.precio_venta || 0));
+          <label className={labelCls}>Producto * <span className="text-slate-400 font-normal">(código o nombre)</span></label>
+          <ProductoAutocomplete
+            value={productoTexto}
+            onChange={(v) => { setProductoTexto(v); setProductoId(''); }}
+            onSelectProducto={(p) => {
+              setProductoId(String(p.id));
+              setProductoTexto(p.codigo ? `[${p.codigo}] ${p.nombre}` : p.nombre);
+              setPrecio(String(p.precio_compra || p.precio_venta || 0));
             }}
-          >
-            <option value="">— Elige producto —</option>
-            {productos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.codigo ? `[${p.codigo}] ` : ''}{p.nombre}
-              </option>
-            ))}
-          </select>
+            className={inputCls + ' bg-white'}
+            placeholder="Empieza a escribir código o nombre…"
+          />
         </div>
         <div>
           <label className={labelCls}>Cantidad *</label>
@@ -182,12 +183,18 @@ function EntradaRapidaForm({ depositoId, productos, onSaved, onCancel }) {
   );
 }
 
-function DepositoDetalle({ deposito, onBack }) {
+function DepositoDetalle({ deposito: depositoInit, clientes, onBack }) {
+  const [deposito, setDeposito] = useState(depositoInit);
   const [stock, setStock] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [productos, setProductos] = useState([]);
   const [showEntrada, setShowEntrada] = useState(false);
+  const [editandoDeposito, setEditandoDeposito] = useState(false);
   const [descargando, setDescargando] = useState(false);
+  // v1.5.1: agrupacion de movimientos por fecha con expand/collapse.
+  const [fechasExpandidas, setFechasExpandidas] = useState(new Set());
+  // v1.5.1: edicion inline de movimiento (por id).
+  const [editandoMov, setEditandoMov] = useState(null);
   const toast = useToast();
 
   async function recargar() {
@@ -204,10 +211,42 @@ function DepositoDetalle({ deposito, onBack }) {
   useEffect(() => { recargar(); /* eslint-disable-next-line */ }, [deposito.id]);
 
   async function eliminarMovimiento(id) {
-    if (!confirm('¿Eliminar este movimiento? El stock se recalculara.')) return;
+    if (!(await confirmDialog({ message: '¿Eliminar este movimiento? El stock se recalculará.', danger: true, okLabel: 'Eliminar' }))) return;
     await window.api.depositos.movimientosDelete(id);
     toast.success('Movimiento eliminado');
     recargar();
+  }
+
+  // Agrupa los movimientos por fecha. Devuelve array [{fecha, items:[m,...]}]
+  // ordenado por fecha descendente.
+  const movimientosPorFecha = useMemo(() => {
+    const g = new Map();
+    for (const m of movimientos) {
+      const k = m.fecha;
+      if (!g.has(k)) g.set(k, []);
+      g.get(k).push(m);
+    }
+    return [...g.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([fecha, items]) => ({ fecha, items }));
+  }, [movimientos]);
+
+  // Al cargar los movimientos por primera vez, expandimos la fecha mas
+  // reciente para que el usuario vea algun contenido sin tener que abrirlo.
+  useEffect(() => {
+    if (movimientosPorFecha.length > 0 && fechasExpandidas.size === 0) {
+      setFechasExpandidas(new Set([movimientosPorFecha[0].fecha]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movimientosPorFecha.length]);
+
+  function toggleFecha(fecha) {
+    setFechasExpandidas((prev) => {
+      const next = new Set(prev);
+      if (next.has(fecha)) next.delete(fecha);
+      else next.add(fecha);
+      return next;
+    });
   }
 
   async function descargarHojaStock() {
@@ -223,7 +262,7 @@ function DepositoDetalle({ deposito, onBack }) {
         />,
       ).toBlob();
       const sug = `Hoja de stock ${deposito.nombre} ${new Date().toISOString().slice(0, 10)}.pdf`;
-      // Demo web: descarga vía blob URL + <a download> (sin filesystem).
+      // Demo web: descarga via blob URL + <a download> (sin filesystem).
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -256,6 +295,12 @@ function DepositoDetalle({ deposito, onBack }) {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setEditandoDeposito(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm hover:bg-slate-50"
+            title="Editar nombre / tienda / notas">
+            <Pencil size={14} />
+            Editar depósito
+          </button>
           <button onClick={descargarHojaStock} disabled={descargando}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm hover:bg-slate-50">
             <Download size={16} />
@@ -268,6 +313,18 @@ function DepositoDetalle({ deposito, onBack }) {
           </button>
         </div>
       </div>
+
+      {editandoDeposito && (
+        <DepositoForm
+          initial={deposito}
+          clientes={clientes}
+          onSaved={(r) => {
+            setEditandoDeposito(false);
+            if (r && !r.error) setDeposito({ ...deposito, ...r });
+          }}
+          onCancel={() => setEditandoDeposito(false)}
+        />
+      )}
 
       {showEntrada && (
         <EntradaRapidaForm
@@ -320,61 +377,172 @@ function DepositoDetalle({ deposito, onBack }) {
         )}
       </div>
 
-      {/* Movimientos */}
+      {/* Movimientos — agrupados por fecha, expandibles */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">
           Movimientos ({movimientos.length})
         </h2>
-        {movimientos.length === 0 ? (
+        {movimientosPorFecha.length === 0 ? (
           <p className="text-sm text-slate-500 py-4 text-center">
             Sin movimientos todavía.
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs text-slate-500 uppercase">
-                <th className="text-left py-2 pr-4">Fecha</th>
-                <th className="text-left py-2 pr-4">Tipo</th>
-                <th className="text-left py-2 pr-4">Producto</th>
-                <th className="text-right py-2 pr-4">Cantidad</th>
-                <th className="text-left py-2 pr-4">Ref.</th>
-                <th className="py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {movimientos.map((m) => (
-                <tr key={m.id} className="border-b border-slate-100">
-                  <td className="py-2 pr-4 text-slate-600">{formatFechaES(m.fecha)}</td>
-                  <td className="py-2 pr-4">
-                    {m.tipo === 'entrada' && <span className="text-emerald-700 text-xs font-medium">Entrada</span>}
-                    {m.tipo === 'salida_factura' && <span className="text-red-700 text-xs font-medium">Salida (factura)</span>}
-                    {m.tipo === 'ajuste' && <span className="text-slate-500 text-xs font-medium">Ajuste</span>}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {m.producto_codigo && <span className="font-mono text-xs text-slate-500 mr-2">[{m.producto_codigo}]</span>}
-                    {m.producto_nombre || m.concepto || '—'}
-                  </td>
-                  <td className={'py-2 pr-4 text-right font-medium ' +
-                    (Number(m.cantidad_signed) > 0 ? 'text-emerald-700' : 'text-red-700')}>
-                    {Number(m.cantidad_signed) > 0 ? '+' : ''}{Number(m.cantidad_signed).toFixed(2)}
-                  </td>
-                  <td className="py-2 pr-4 text-xs text-slate-500">
-                    {m.factura_numero ? `Fac. ${m.factura_numero}` : (m.notas || '—')}
-                  </td>
-                  <td className="py-2 text-right">
-                    {m.tipo !== 'salida_factura' && (
-                      <button onClick={() => eliminarMovimiento(m.id)}
-                        className="p-1 rounded hover:bg-red-50 text-red-600" title="Eliminar">
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="divide-y divide-slate-100">
+            {movimientosPorFecha.map(({ fecha, items }) => {
+              const abierta = fechasExpandidas.has(fecha);
+              const totalEntradas = items.filter((m) => Number(m.cantidad_signed) > 0).length;
+              const totalSalidas  = items.filter((m) => Number(m.cantidad_signed) < 0).length;
+              return (
+                <div key={fecha}>
+                  <button
+                    onClick={() => toggleFecha(fecha)}
+                    className="w-full flex items-center gap-3 py-3 text-left hover:bg-slate-50 px-2 rounded"
+                  >
+                    {abierta
+                      ? <ChevronDown size={16} className="text-slate-500 shrink-0" />
+                      : <ChevronRight size={16} className="text-slate-500 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-slate-800">
+                        {formatFechaES(fecha)}
+                      </div>
+                    </div>
+                    <div className="flex gap-3 text-xs">
+                      {totalEntradas > 0 && (
+                        <span className="text-emerald-700">
+                          {totalEntradas} entrada{totalEntradas !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {totalSalidas > 0 && (
+                        <span className="text-red-700">
+                          {totalSalidas} salida{totalSalidas !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  {abierta && (
+                    <div className="pb-3 pl-8 pr-2 space-y-1">
+                      {items.map((m) => (
+                        <MovimientoRow
+                          key={m.id}
+                          m={m}
+                          editando={editandoMov === m.id}
+                          onEdit={() => setEditandoMov(m.id)}
+                          onSaved={() => { setEditandoMov(null); recargar(); }}
+                          onCancel={() => setEditandoMov(null)}
+                          onDelete={() => eliminarMovimiento(m.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function MovimientoRow({ m, editando, onEdit, onSaved, onCancel, onDelete }) {
+  const [cantidad, setCantidad] = useState(String(Math.abs(Number(m.cantidad_signed) || 0)));
+  const [notas, setNotas] = useState(m.notas || '');
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const esFactura = m.tipo === 'salida_factura';
+  const editable = !esFactura;
+
+  useEffect(() => {
+    if (editando) {
+      setCantidad(String(Math.abs(Number(m.cantidad_signed) || 0)));
+      setNotas(m.notas || '');
+    }
+  }, [editando, m]);
+
+  async function guardar() {
+    const c = Number(cantidad);
+    if (!Number.isFinite(c) || c <= 0) { toast.error('Cantidad debe ser > 0'); return; }
+    setSaving(true);
+    try {
+      const res = await window.api.depositos.movimientosUpdate(m.id, {
+        cantidad_signed: c,
+        notas: notas.trim() || null,
+      });
+      if (res?.error) { toast.error(res.error); return; }
+      toast.success('Movimiento actualizado');
+      onSaved();
+    } catch (e) { toast.error(e.message ?? String(e)); }
+    finally { setSaving(false); }
+  }
+
+  if (editando) {
+    return (
+      <div className="flex items-center gap-2 py-1.5 bg-amber-50 border border-amber-200 rounded px-2">
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-700 truncate">
+            {m.producto_codigo && <span className="font-mono text-slate-500 mr-1">[{m.producto_codigo}]</span>}
+            {m.producto_nombre || m.concepto || '—'}
+          </span>
+        </div>
+        <input
+          type="number"
+          step="0.01"
+          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-right"
+          value={cantidad}
+          onChange={(e) => setCantidad(e.target.value)}
+          onFocus={(e) => e.target.select()}
+        />
+        <input
+          type="text"
+          className="w-40 px-2 py-1 border border-slate-300 rounded text-sm"
+          value={notas}
+          onChange={(e) => setNotas(e.target.value)}
+          placeholder="Notas"
+        />
+        <button onClick={guardar} disabled={saving}
+          className="p-1 rounded hover:bg-emerald-100 text-emerald-700" title="Guardar">
+          <Check size={14} />
+        </button>
+        <button onClick={onCancel} disabled={saving}
+          className="p-1 rounded hover:bg-slate-100 text-slate-600" title="Cancelar">
+          <X size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 text-sm hover:bg-slate-50 rounded px-2">
+      <div className="flex-1 min-w-0">
+        <span className="truncate">
+          {m.producto_codigo && <span className="font-mono text-xs text-slate-500 mr-2">[{m.producto_codigo}]</span>}
+          {m.producto_nombre || m.concepto || '—'}
+        </span>
+      </div>
+      <div className="text-xs">
+        {m.tipo === 'entrada' && <span className="text-emerald-700 font-medium">Entrada</span>}
+        {m.tipo === 'salida_factura' && <span className="text-red-700 font-medium">Salida (factura)</span>}
+        {m.tipo === 'ajuste' && <span className="text-slate-500 font-medium">Ajuste</span>}
+      </div>
+      <div className={'w-16 text-right font-medium tabular-nums ' +
+        (Number(m.cantidad_signed) > 0 ? 'text-emerald-700' : 'text-red-700')}>
+        {Number(m.cantidad_signed) > 0 ? '+' : ''}{Number(m.cantidad_signed).toFixed(2)}
+      </div>
+      <div className="w-32 text-xs text-slate-500 truncate">
+        {m.factura_numero ? `Fac. ${m.factura_numero}` : (m.notas || '—')}
+      </div>
+      {editable && (
+        <>
+          <button onClick={onEdit}
+            className="p-1 rounded hover:bg-slate-200 text-slate-600" title="Editar">
+            <Pencil size={13} />
+          </button>
+          <button onClick={onDelete}
+            className="p-1 rounded hover:bg-red-50 text-red-600" title="Eliminar">
+            <Trash2 size={13} />
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -401,14 +569,18 @@ function Depositos() {
   useEffect(() => { recargar(); }, []);
 
   async function eliminar(id) {
-    if (!confirm('¿Archivar este depósito? Los movimientos quedan en histórico.')) return;
+    if (!(await confirmDialog({ message: '¿Archivar este depósito? Los movimientos quedan en histórico.', danger: true, okLabel: 'Archivar' }))) return;
     await window.api.depositos.delete(id);
     toast.success('Depósito archivado');
     recargar();
   }
 
   if (seleccionado) {
-    return <DepositoDetalle deposito={seleccionado} onBack={() => { setSeleccionado(null); recargar(); }} />;
+    return <DepositoDetalle
+      deposito={seleccionado}
+      clientes={clientes}
+      onBack={() => { setSeleccionado(null); recargar(); }}
+    />;
   }
 
   return (

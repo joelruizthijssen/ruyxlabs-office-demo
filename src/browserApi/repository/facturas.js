@@ -56,7 +56,10 @@ export function facturasList() {
 
 export function facturasGet(id) {
   const db = getDb();
-  const f = db.prepare('SELECT * FROM facturas WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
+  const f = db.prepare(`SELECT * FROM facturas WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!f) return null;
   const lineas = db.prepare(`
     SELECT lf.*,
@@ -155,7 +158,10 @@ export function facturasCreate(serie, subtipo) {
 
 export function facturasUpdate(id, data) {
   const db = getDb();
-  const current = db.prepare('SELECT * FROM facturas WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa antes de mutar.
+  const sc = empresaScope();
+  const current = db.prepare(`SELECT * FROM facturas WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!current) return null;
   if (current.estado !== 'borrador') {
     const nuevoEstado = data?.estado ?? current.estado;
@@ -237,7 +243,10 @@ export function facturasUpdate(id, data) {
 
 export function facturasDelete(id) {
   const db = getDb();
-  const row = db.prepare('SELECT estado, deleted_at FROM facturas WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
+  const row = db.prepare(`SELECT estado, deleted_at FROM facturas WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!row || row.deleted_at) return { ok: false };
   if (row.estado === 'borrador') {
     db.prepare(`

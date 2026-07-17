@@ -72,9 +72,16 @@ function TourController() {
 
   // Auto-launch del tour general en primer arranque (~800ms delay para que el
   // DOM y los elementos [data-tour] esten montados y estables).
+  //
+  // v1.5.1: marcar el tour como visto TAN PRONTO como se arranca (no al
+  // terminarlo). El comportamiento anterior solo marcaba en FINISHED/SKIPPED,
+  // por lo que si el usuario cerraba la app durante el tour, cambiaba de
+  // pagina, o un paso se quedaba colgado (target no montado), el flag nunca
+  // se seteaba y el tour salia OTRA vez al proximo arranque.
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!isTourSeen('general')) {
+        markTourSeen('general');
         startTour('general');
       }
     }, 800);

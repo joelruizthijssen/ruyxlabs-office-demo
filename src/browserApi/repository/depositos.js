@@ -2,7 +2,7 @@
 // Puerto browser de depositos_* + movimientos_deposito_* + hooks internos.
 
 import { getDb } from '../db.js';
-import { empresaActivaId } from '../helpers.js';
+import { empresaActivaId, empresaScope } from '../helpers.js';
 
 export function depositosList(opts) {
   const db = getDb();
@@ -20,12 +20,14 @@ export function depositosList(opts) {
 
 export function depositosGet(id) {
   const db = getDb();
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope('d');
   return db.prepare(`
     SELECT d.*, c.nombre AS cliente_nombre
     FROM depositos d
     LEFT JOIN clientes c ON c.id = d.cliente_id
-    WHERE d.id = ?
-  `).get([id]);
+    WHERE d.id = ?${sc.sql}
+  `).get([id, ...sc.params]);
 }
 
 export function depositosCreate(data) {
@@ -71,13 +73,18 @@ export function depositosUpdate(id, data) {
 
 export function depositosDelete(id) {
   const db = getDb();
-  db.prepare(`UPDATE depositos SET activo = 0, updated_at = datetime('now') WHERE id = ?`).run([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
+  db.prepare(`UPDATE depositos SET activo = 0, updated_at = datetime('now') WHERE id = ?${sc.sql}`)
+    .run([id, ...sc.params]);
   return { ok: true };
 }
 
 // Stock actual agrupado por producto. Precio medio ponderado de las entradas.
 export function depositosStockActual(depositoId) {
   const db = getDb();
+  // v1.5.1 (auditoria seguridad): verificar deposito en empresa activa.
+  if (!depositosGet(depositoId)) return [];
   return db.prepare(`
     SELECT
       m.producto_id,
@@ -102,6 +109,8 @@ export function depositosStockActual(depositoId) {
 
 export function depositosMovimientosList(depositoId) {
   const db = getDb();
+  // v1.5.1 (auditoria seguridad): verificar deposito en empresa activa.
+  if (!depositosGet(depositoId)) return [];
   return db.prepare(`
     SELECT
       m.*,
@@ -119,6 +128,10 @@ export function depositosMovimientosList(depositoId) {
 export function depositosMovimientosCreate(data) {
   const db = getDb();
   if (!data?.deposito_id) return { error: 'Falta deposito_id' };
+  // v1.5.1 (auditoria seguridad): verificar deposito en empresa activa.
+  if (!depositosGet(data.deposito_id)) {
+    return { error: 'Deposito no encontrado' };
+  }
   const tipo = ['entrada', 'salida_factura', 'ajuste'].includes(data.tipo)
     ? data.tipo : 'entrada';
   const cantidad = Number(data.cantidad_signed);
@@ -157,8 +170,49 @@ export function depositosMovimientosCreate(data) {
 
 export function depositosMovimientosDelete(id) {
   const db = getDb();
-  db.prepare('DELETE FROM movimientos_deposito WHERE id = ?').run([id]);
-  return { ok: true };
+  // v1.5.1 (auditoria seguridad): scope via depositos de empresa activa.
+  const sc = empresaScope('d');
+  const info = db.prepare(`
+    DELETE FROM movimientos_deposito
+    WHERE id = ? AND deposito_id IN (
+      SELECT d.id FROM depositos d WHERE 1=1${sc.sql}
+    )
+  `).run([id, ...sc.params]);
+  return { ok: info.changes > 0 };
+}
+
+// v1.5.1: editar cantidad, precio, fecha y notas de un movimiento manual.
+// Solo aplica a 'entrada' y 'ajuste' — los 'salida_factura' se recalculan
+// al modificar la factura origen.
+export function depositosMovimientosUpdate(id, data) {
+  const db = getDb();
+  const sc = empresaScope('d');
+  const mov = db.prepare(`
+    SELECT m.* FROM movimientos_deposito m
+    JOIN depositos d ON d.id = m.deposito_id
+    WHERE m.id = ?${sc.sql}
+  `).get([id, ...sc.params]);
+  if (!mov) return { error: 'Movimiento no encontrado' };
+  if (mov.tipo === 'salida_factura') {
+    return { error: 'Este movimiento se genera desde una factura. Edita la factura.' };
+  }
+  const patch = {};
+  if (data.cantidad_signed != null) {
+    const c = Number(data.cantidad_signed);
+    if (!Number.isFinite(c) || c === 0) return { error: 'La cantidad debe ser un numero distinto de 0' };
+    patch.cantidad_signed = mov.tipo === 'entrada' ? Math.abs(c) : c;
+  }
+  if (data.precio_unitario != null) patch.precio_unitario = Number(data.precio_unitario) || 0;
+  if (data.fecha != null) patch.fecha = data.fecha;
+  if (data.notas !== undefined) patch.notas = data.notas ?? null;
+  const keys = Object.keys(patch);
+  if (keys.length === 0) return { ok: false, error: 'Nada que actualizar' };
+  const setSQL = keys.map((k) => `${k} = :${k}`).join(', ');
+  const params = {};
+  keys.forEach((k) => { params[':' + k] = patch[k]; });
+  params[':id'] = id;
+  db.prepare(`UPDATE movimientos_deposito SET ${setSQL} WHERE id = :id`).run(params);
+  return db.prepare('SELECT * FROM movimientos_deposito WHERE id = ?').get([id]);
 }
 
 // Auto-descuento al facturar. Idempotente por factura_id + filtrado por

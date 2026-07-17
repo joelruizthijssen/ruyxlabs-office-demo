@@ -2,6 +2,8 @@
 
 import { getDb } from '../db.js';
 import { empresaActivaId, empresaScope } from '../helpers.js';
+// v1.5.1 (auditoria seguridad): usar empresaScope() en get/update/delete
+// para no leer/mutar clientes de otras empresas via ID conocido.
 
 function _normalizeTipoCliente(tipo) {
   return ['autonomo', 'empresa', 'particular'].includes(tipo) ? tipo : 'empresa';
@@ -17,12 +19,16 @@ export function clientesList() {
 
 export function clientesGet(id) {
   const db = getDb();
-  return db.prepare('SELECT * FROM clientes WHERE id = ?').get([id]);
+  const sc = empresaScope();
+  return db.prepare(`SELECT * FROM clientes WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
 }
 
 export function clientesDetalle(id) {
   const db = getDb();
-  const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get([id]);
+  const sc = empresaScope();
+  const cliente = db.prepare(`SELECT * FROM clientes WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!cliente) return null;
 
   const facturas = db.prepare(`
@@ -227,9 +233,10 @@ export function clientesUpdate(id, data) {
 
 export function clientesDelete(id) {
   const db = getDb();
+  const sc = empresaScope();
   const info = db
-    .prepare("UPDATE clientes SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL")
-    .run([id]);
+    .prepare(`UPDATE clientes SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL${sc.sql}`)
+    .run([id, ...sc.params]);
   return { ok: info.changes > 0 };
 }
 

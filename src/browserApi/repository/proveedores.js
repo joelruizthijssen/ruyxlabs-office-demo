@@ -13,7 +13,10 @@ export function proveedoresList() {
 
 export function proveedoresGet(id) {
   const db = getDb();
-  return db.prepare('SELECT * FROM proveedores WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
+  return db.prepare(`SELECT * FROM proveedores WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
 }
 
 export function proveedoresCreate(data) {
@@ -98,9 +101,11 @@ export function proveedoresUpdate(id, data) {
 
 export function proveedoresDelete(id) {
   const db = getDb();
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
   const info = db.prepare(
-    "UPDATE proveedores SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
-  ).run([id]);
+    `UPDATE proveedores SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL${sc.sql}`,
+  ).run([id, ...sc.params]);
   return { ok: info.changes > 0 };
 }
 

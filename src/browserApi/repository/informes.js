@@ -308,28 +308,31 @@ export function searchGlobal(query) {
   const q = String(query || '').trim();
   if (q.length < 2) return { factura_ids: [], presupuesto_ids: [] };
   const like = `%${q.replace(/[%_]/g, (m) => '\\' + m)}%`;
+  // v1.5.1 (auditoria seguridad): scope por empresa activa. Antes cruzaba
+  // empresas — un usuario con 2 empresas veia ids de la otra al buscar.
+  const empresaId = empresaActivaId();
   const facturasFromLineas = db.prepare(`
     SELECT DISTINCT f.id FROM facturas f
     JOIN lineas_factura l ON l.factura_id = f.id
-    WHERE f.deleted_at IS NULL
+    WHERE f.deleted_at IS NULL AND f.empresa_id = ?
       AND (LOWER(l.titulo) LIKE LOWER(?) ESCAPE '\\'
         OR LOWER(l.descripcion) LIKE LOWER(?) ESCAPE '\\')
-  `).all([like, like]).map((r) => r.id);
+  `).all([empresaId, like, like]).map((r) => r.id);
   const facturasFromNotas = db.prepare(`
-    SELECT id FROM facturas WHERE deleted_at IS NULL
+    SELECT id FROM facturas WHERE deleted_at IS NULL AND empresa_id = ?
       AND LOWER(notas) LIKE LOWER(?) ESCAPE '\\'
-  `).all([like]).map((r) => r.id);
+  `).all([empresaId, like]).map((r) => r.id);
   const presFromLineas = db.prepare(`
     SELECT DISTINCT p.id FROM presupuestos p
     JOIN lineas_presupuesto l ON l.presupuesto_id = p.id
-    WHERE p.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL AND p.empresa_id = ?
       AND (LOWER(l.titulo) LIKE LOWER(?) ESCAPE '\\'
         OR LOWER(l.descripcion) LIKE LOWER(?) ESCAPE '\\')
-  `).all([like, like]).map((r) => r.id);
+  `).all([empresaId, like, like]).map((r) => r.id);
   const presFromNotas = db.prepare(`
-    SELECT id FROM presupuestos WHERE deleted_at IS NULL
+    SELECT id FROM presupuestos WHERE deleted_at IS NULL AND empresa_id = ?
       AND LOWER(notas) LIKE LOWER(?) ESCAPE '\\'
-  `).all([like]).map((r) => r.id);
+  `).all([empresaId, like]).map((r) => r.id);
   return {
     factura_ids: Array.from(new Set([...facturasFromLineas, ...facturasFromNotas])),
     presupuesto_ids: Array.from(new Set([...presFromLineas, ...presFromNotas])),

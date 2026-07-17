@@ -36,7 +36,10 @@ export function presupuestosList() {
 
 export function presupuestosGet(id) {
   const db = getDb();
-  const p = db.prepare('SELECT * FROM presupuestos WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
+  const p = db.prepare(`SELECT * FROM presupuestos WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!p) return null;
   const lineas = db.prepare(`
     SELECT lp.*,
@@ -115,7 +118,10 @@ export function presupuestosCreate(serie) {
 
 export function presupuestosUpdate(id, data) {
   const db = getDb();
-  const current = db.prepare('SELECT * FROM presupuestos WHERE id = ?').get([id]);
+  // v1.5.1 (auditoria seguridad): scope por empresa activa antes de mutar.
+  const sc = empresaScope();
+  const current = db.prepare(`SELECT * FROM presupuestos WHERE id = ?${sc.sql}`)
+    .get([id, ...sc.params]);
   if (!current) return null;
   if (current.estado === 'convertido') {
     const nuevoEstado = data?.estado ?? current.estado;
@@ -165,9 +171,11 @@ export function presupuestosUpdate(id, data) {
 
 export function presupuestosDelete(id) {
   const db = getDb();
+  // v1.5.1 (auditoria seguridad): scope por empresa activa.
+  const sc = empresaScope();
   const info = db.prepare(
-    "UPDATE presupuestos SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
-  ).run([id]);
+    `UPDATE presupuestos SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL${sc.sql}`,
+  ).run([id, ...sc.params]);
   return { ok: info.changes > 0 };
 }
 
