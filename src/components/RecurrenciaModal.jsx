@@ -116,8 +116,8 @@ function RecurrenciaModal({ tipo, sourceId, sourceLabel, existing, onClose, onSa
       className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
           <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
             <Repeat size={18} className="text-brand" />
             {existing ? 'Recurrencia' : 'Hacer recurrente'}
@@ -127,7 +127,7 @@ function RecurrenciaModal({ tipo, sourceId, sourceLabel, existing, onClose, onSa
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
           <p className="text-sm text-slate-600">
             Cada periodo se generara un nuevo borrador clonando{' '}
             <strong>{sourceLabel}</strong>. Tu lo revisas y lo emites cuando toque.
@@ -194,7 +194,7 @@ function RecurrenciaModal({ tipo, sourceId, sourceLabel, existing, onClose, onSa
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-200 flex justify-between items-center">
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-between items-center shrink-0">
           {existing ? (
             <button
               type="button"

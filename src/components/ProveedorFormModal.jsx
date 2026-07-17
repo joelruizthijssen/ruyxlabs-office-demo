@@ -118,7 +118,7 @@ function ProveedorFormModal({ proveedor, onSaved, onCancel }) {
       className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h[92vh]" style={{ maxHeight: '92vh' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[92vh]">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
           <h2 className="text-base font-semibold text-slate-800">
             {isEdit ? `Editar proveedor: ${proveedor.nombre}` : 'Nuevo proveedor'}

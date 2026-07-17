@@ -332,13 +332,13 @@ function Productos() {
           className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget) cerrar(); }}
         >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
-            <div className="px-5 py-4 border-b border-slate-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-200 shrink-0">
               <h2 className="text-lg font-semibold text-slate-800">
                 {editing.id ? 'Editar producto' : 'Nuevo producto'}
               </h2>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={labelCls}>Código</label>
@@ -541,7 +541,7 @@ function Productos() {
                 exportaciones van sin IVA y solo el comercio nacional lo lleva.
               </p>
             </div>
-            <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+            <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2 shrink-0">
               <button
                 onClick={cerrar}
                 className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm"
