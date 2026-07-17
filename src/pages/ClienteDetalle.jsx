@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, MapPin, FileText, Receipt, Wallet,
-  Repeat, TrendingUp, Hash, Pencil,
+  Repeat, TrendingUp, Hash, Pencil, Warehouse,
 } from 'lucide-react';
 import { formatEUR, formatFechaES } from '../utils/format.js';
 import { useToast } from '../components/Toast.jsx';
@@ -170,12 +170,21 @@ function ClienteDetalle() {
               )}
             </div>
           </div>
-          <button
-            onClick={() => setShowEditModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 text-sm"
-          >
-            <Pencil size={14} /> Editar
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => nav('/depositos')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 text-sm"
+              title="Ir a Depósitos para elegir de cuál sale el material y facturar"
+            >
+              <Warehouse size={14} /> Facturar desde depósito
+            </button>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 text-sm"
+            >
+              <Pencil size={14} /> Editar
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-sm">

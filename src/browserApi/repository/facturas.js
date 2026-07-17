@@ -207,6 +207,7 @@ export function facturasUpdate(id, data) {
       descuento_tipo = :dtipo, descuento_valor = :dvalor,
       titulo_documento_override = :titulo_override,
       idioma_documento = :idioma_doc,
+      deposito_id = :deposito_id,
       updated_at = datetime('now')
     WHERE id = :id
   `).run({
@@ -226,6 +227,8 @@ export function facturasUpdate(id, data) {
     ':dvalor': Number(m.descuento_valor) || 0,
     ':titulo_override': tituloOverride,
     ':idioma_doc': idiomaDoc,
+    // v1.5.2: opt-in por factura del descuento de stock.
+    ':deposito_id': m.deposito_id ? Number(m.deposito_id) : null,
   });
   if (m.modo_detallado) {
     const lineas = db.prepare('SELECT id FROM lineas_factura WHERE factura_id = ?').all([id]);

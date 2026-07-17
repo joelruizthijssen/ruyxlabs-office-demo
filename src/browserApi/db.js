@@ -869,6 +869,9 @@ function _runMigrations() {
       ON movimientos_deposito(producto_id);
   `);
 
+  // v1.5.2: opt-in por factura del descuento de stock (no auto por cliente).
+  _ensureColumn('facturas', 'deposito_id', 'deposito_id INTEGER');
+
   // --- Semilla minima para demo web ---
   // Solo si no existe empresa nº1 con datos (BD fresca). Marca legal como
   // aceptado y crea una empresa demo con datos plausibles, para que la app

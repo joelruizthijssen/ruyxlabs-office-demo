@@ -111,15 +111,19 @@ export function depositosMovimientosList(depositoId) {
   const db = getDb();
   // v1.5.1 (auditoria seguridad): verificar deposito en empresa activa.
   if (!depositosGet(depositoId)) return [];
+  // v1.5.2: LEFT JOIN a clientes via facturas para mostrar el cliente en las
+  // salidas por factura.
   return db.prepare(`
     SELECT
       m.*,
       p.nombre AS producto_nombre,
       p.codigo AS producto_codigo,
-      f.numero AS factura_numero
+      f.numero AS factura_numero,
+      c.nombre AS factura_cliente_nombre
     FROM movimientos_deposito m
     LEFT JOIN productos p ON p.id = m.producto_id
     LEFT JOIN facturas f  ON f.id = m.factura_id
+    LEFT JOIN clientes c  ON c.id = f.cliente_id
     WHERE m.deposito_id = ?
     ORDER BY m.fecha DESC, m.id DESC
   `).all([depositoId]);
@@ -215,19 +219,20 @@ export function depositosMovimientosUpdate(id, data) {
   return db.prepare('SELECT * FROM movimientos_deposito WHERE id = ?').get([id]);
 }
 
-// Auto-descuento al facturar. Idempotente por factura_id + filtrado por
-// empresa_id (defense-in-depth multi-empresa).
+// v1.5.2: descuento opt-in. La factura tiene columna `deposito_id` que la
+// usuaria rellena en el editor. NULL = no descontar (por defecto).
+// Idempotente por factura_id.
 export function depositosAplicarSalidaPorFactura(facturaId) {
   const db = getDb();
   const factura = db.prepare(
-    'SELECT id, empresa_id, cliente_id FROM facturas WHERE id = ?',
+    'SELECT id, empresa_id, deposito_id FROM facturas WHERE id = ?',
   ).get([facturaId]);
-  if (!factura || !factura.cliente_id) return;
+  if (!factura || !factura.deposito_id) return;
   const deposito = db.prepare(`
     SELECT id FROM depositos
-    WHERE cliente_id = ? AND empresa_id = ? AND activo = 1
+    WHERE id = ? AND empresa_id = ? AND activo = 1
     LIMIT 1
-  `).get([factura.cliente_id, factura.empresa_id]);
+  `).get([factura.deposito_id, factura.empresa_id]);
   if (!deposito) return;
   const yaAplicado = db.prepare(
     'SELECT COUNT(*) AS c FROM movimientos_deposito WHERE factura_id = ?',
@@ -260,7 +265,7 @@ export function depositosAplicarSalidaPorFactura(facturaId) {
       ':precio_unitario': Number(l.precio_unitario) || 0,
       ':factura_id': facturaId,
       ':linea_factura_id': l.id,
-      ':notas': 'Salida automatica al emitir factura',
+      ':notas': 'Salida por factura',
     });
   }
 }

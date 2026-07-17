@@ -290,8 +290,8 @@ function DepositoDetalle({ deposito: depositoInit, clientes, onBack }) {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-slate-800">{deposito.nombre}</h1>
-            <p className="text-sm text-slate-500">{deposito.cliente_nombre}</p>
+            <h1 className="text-xl font-semibold text-slate-800">{deposito.cliente_nombre}</h1>
+            <p className="text-sm text-slate-500">{deposito.nombre}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -528,8 +528,10 @@ function MovimientoRow({ m, editando, onEdit, onSaved, onCancel, onDelete }) {
         (Number(m.cantidad_signed) > 0 ? 'text-emerald-700' : 'text-red-700')}>
         {Number(m.cantidad_signed) > 0 ? '+' : ''}{Number(m.cantidad_signed).toFixed(2)}
       </div>
-      <div className="w-32 text-xs text-slate-500 truncate">
-        {m.factura_numero ? `Fac. ${m.factura_numero}` : (m.notas || '—')}
+      <div className="w-48 text-xs text-slate-500 truncate">
+        {m.factura_numero
+          ? `Fac. ${m.factura_numero}${m.factura_cliente_nombre ? ' · ' + m.factura_cliente_nombre : ''}`
+          : (m.notas || '—')}
       </div>
       {editable && (
         <>
@@ -635,8 +637,8 @@ function Depositos() {
             >
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-800">{d.nombre}</h3>
-                  <p className="text-xs text-slate-500">{d.cliente_nombre}</p>
+                  <h3 className="text-sm font-semibold text-slate-800">{d.cliente_nombre}</h3>
+                  <p className="text-xs text-slate-500">{d.nombre}</p>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); eliminar(d.id); }}
                   className="p-1 rounded hover:bg-red-50 text-red-500" title="Archivar">

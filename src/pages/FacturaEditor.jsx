@@ -81,9 +81,13 @@ function FacturaEditor() {
     // v1.5.0: idioma del PDF de este documento. NULL = usar el default
     // (idioma preferido del cliente > idioma global de la empresa > 'es').
     idioma_documento: null,
+    // v1.5.2: deposito del que se descontara el stock al emitir la factura.
+    // NULL = no descontar. Opt-in por factura, no auto por cliente.
+    deposito_id: null,
   });
   const [cabOriginal, setCabOriginal] = useState(cab);
   const [marcas, setMarcas] = useState([]);
+  const [depositosActivos, setDepositosActivos] = useState([]);
 
   // v1.4.0: state local del input del numero para evitar el bug del
   // autoguardado con valor stale. Ver comentario detallado en la app
@@ -96,6 +100,13 @@ function FacturaEditor() {
   useEffect(() => {
     if (!window.api?.marcas) return;
     window.api.marcas.list().then((l) => setMarcas(Array.isArray(l) ? l : []));
+  }, []);
+
+  useEffect(() => {
+    if (!window.api?.depositos) return;
+    window.api.depositos.list({ solo_activos: true })
+      .then((l) => setDepositosActivos(Array.isArray(l) ? l : []))
+      .catch(() => setDepositosActivos([]));
   }, []);
 
   const [lineas, setLineas] = useState([]);
@@ -158,6 +169,7 @@ function FacturaEditor() {
         convertida_a: f.convertida_a || null,
         titulo_documento_override: f.titulo_documento_override || '',
         idioma_documento: f.idioma_documento || null,
+        deposito_id: f.deposito_id || null,
       };
       // Autorrelleno de IRPF al cargar: si la factura es borrador, no tiene
       // IRPF puesto todavia, y el cliente tiene un default > 0, aplicarlo.
@@ -992,6 +1004,32 @@ function FacturaEditor() {
                 también salen en inglés.
               </p>
             </div>
+            {/* v1.5.2: selector deposito para descontar stock. Solo aparece
+                si hay al menos un deposito activo. Puede ser cualquier
+                deposito, no solo los del cliente de la factura. */}
+            {depositosActivos.length > 0 && (
+              <div>
+                <label className={labelCls}>Descontar stock del depósito</label>
+                <select
+                  className={inputCls + ' bg-white'}
+                  value={cab.deposito_id || ''}
+                  disabled={bloqueada}
+                  onChange={(e) => setCabField('deposito_id', e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">— No descontar —</option>
+                  {depositosActivos.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.cliente_nombre} — {d.nombre}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Al emitir la factura, se descontarán del depósito
+                  seleccionado las cantidades de las líneas con producto.
+                  Déjalo en “No descontar” si esta venta no sale de depósito.
+                </p>
+              </div>
+            )}
             {marcas.length > 0 && (
               <div>
                 <label className={labelCls}>Marca</label>
