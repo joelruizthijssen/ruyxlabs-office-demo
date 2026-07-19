@@ -4,6 +4,19 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App.jsx';
 import { initBrowserApi } from './browserApi/index.js';
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+
+// Arranca la descarga del .wasm en paralelo mientras React + el bundle
+// se procesan. Recorta ~500ms del arranque inicial en visitas frescas.
+(() => {
+  const link = document.createElement('link');
+  link.rel = 'preload';
+  link.as = 'fetch';
+  link.type = 'application/wasm';
+  link.crossOrigin = 'anonymous';
+  link.href = sqlWasmUrl;
+  document.head.appendChild(link);
+})();
 
 async function boot() {
   const rootEl = document.getElementById('root');

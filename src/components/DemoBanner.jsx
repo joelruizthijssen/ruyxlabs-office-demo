@@ -32,6 +32,14 @@ export default function DemoBanner() {
           {resetting ? 'Reiniciando…' : 'Reiniciar demo'}
         </button>
         <a
+          href="https://github.com/joelruizthijssen/ruyxlabs-office-demo"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-amber-900 underline hover:text-amber-950"
+        >
+          Ver el código
+        </a>
+        <a
           href="https://ruyxlabs.com"
           target="_blank"
           rel="noopener noreferrer"
