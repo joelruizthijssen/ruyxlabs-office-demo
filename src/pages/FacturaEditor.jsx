@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowDown, ArrowUp, Check, Download, FileCheck, FileCode2, FileOutput, FileSpreadsheet, Lock, Maximize2, Plus, Repeat, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowDown, ArrowUp, Check, Download, FileCheck, FileCode2, FileOutput, FileSpreadsheet, Lock, Maximize2, Plus, Repeat, Save, Trash2, Warehouse, X } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import FacturaPDF from '../pdf/FacturaPDF.jsx';
 import PDFCanvasPreview from '../components/PDFCanvasPreview.jsx';
@@ -358,10 +358,25 @@ function FacturaEditor() {
     );
   }
 
+  // v1.5.5: dialogo "descontar de deposito" al emitir.
+  const [emitirDepositoModal, setEmitirDepositoModal] = useState(null);
+  const emitirDepositoResolveRef = useRef(null);
+
+  function pedirDepositoParaEmitir() {
+    return new Promise((resolve) => {
+      emitirDepositoResolveRef.current = resolve;
+      setEmitirDepositoModal({ open: true });
+    });
+  }
+
+  function cerrarEmitirDepositoModal(result) {
+    const r = emitirDepositoResolveRef.current;
+    emitirDepositoResolveRef.current = null;
+    setEmitirDepositoModal(null);
+    if (r) r(result);
+  }
+
   // --- cambio de estado: persistencia INMEDIATA (sin debounce) ---
-  // El estado es el campo critico de la factura: queremos que se guarde
-  // ya, no en 500ms via autosave, para que aunque el usuario navegue
-  // rapido o el preview PDF este regenerandose, no se pierda el cambio.
   async function onChangeEstado(nuevoEstado) {
     if (
       nuevoEstado === 'emitida' &&
@@ -372,26 +387,48 @@ function FacturaEditor() {
       setTimeout(() => setError(null), 4000);
       return;
     }
+    // v1.5.5: si va a emitir y hay depositos activos pero no eligio ninguno,
+    // preguntar antes de confirmar la emision.
+    let depositoIdOverride = null;
+    let usarOverride = false;
+    if (
+      cab.estado === 'borrador' &&
+      nuevoEstado === 'emitida' &&
+      depositosActivos.length > 0 &&
+      !cab.deposito_id
+    ) {
+      const eleccion = await pedirDepositoParaEmitir();
+      if (eleccion === undefined) return;
+      depositoIdOverride = eleccion.deposito_id ?? null;
+      usarOverride = true;
+    }
     if (cab.estado === 'borrador' && nuevoEstado === 'emitida') {
       const ok = confirm(
         'Una vez emitida, los datos quedarán bloqueados.\n¿Continuar?',
       );
       if (!ok) return;
     }
-    // 1) Optimistic UI: actualiza local enseguida.
-    setCab((c) => ({ ...c, estado: nuevoEstado }));
-    // 2) Persistir directamente (no esperamos al debounce).
+    setCab((c) => ({
+      ...c,
+      estado: nuevoEstado,
+      ...(usarOverride ? { deposito_id: depositoIdOverride } : {}),
+    }));
     try {
-      const payload = { ...cab, estado: nuevoEstado };
+      const payload = {
+        ...cab,
+        estado: nuevoEstado,
+        ...(usarOverride ? { deposito_id: depositoIdOverride } : {}),
+      };
       const res = await window.api.facturas.update(facturaId, payload);
       if (res?.error) {
         setError(res.error);
         return;
       }
-      // 3) Actualiza cabOriginal para que el autosave debounced (que se
-      //    dispararia por el cambio de cab) detecte que ya estamos en sync
-      //    y haga early-return.
-      setCabOriginal((o) => ({ ...o, estado: nuevoEstado }));
+      setCabOriginal((o) => ({
+        ...o,
+        estado: nuevoEstado,
+        ...(usarOverride ? { deposito_id: depositoIdOverride } : {}),
+      }));
     } catch (e) {
       setError(e.message ?? String(e));
     }
@@ -1795,6 +1832,98 @@ function FacturaEditor() {
           onCancel={() => setShowConvertirProforma(false)}
         />
       )}
+      {emitirDepositoModal?.open && (
+        <EmitirDepositoModal
+          depositos={depositosActivos}
+          onEmitir={(deposito_id) => cerrarEmitirDepositoModal({ deposito_id })}
+          onCancelar={() => cerrarEmitirDepositoModal(undefined)}
+        />
+      )}
+    </div>
+  );
+}
+
+// v1.5.5: modal que aparece al emitir factura si hay depositos activos y
+// el usuario no eligio ninguno en la cabecera.
+function EmitirDepositoModal({ depositos, onEmitir, onCancelar }) {
+  const [seleccion, setSeleccion] = useState('');
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onCancelar(); }}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
+          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <Warehouse size={18} className="text-brand" />
+            ¿Descontar material del depósito?
+          </h2>
+          <button onClick={onCancelar} className="text-slate-400 hover:text-slate-600" title="Cancelar">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          <p className="text-sm text-slate-600">
+            Vas a emitir la factura. Si el material sale de uno de tus
+            depósitos, elígelo aquí y las cantidades se descontarán del
+            stock automáticamente. Si es una venta normal, pulsa “No
+            descontar”.
+          </p>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-2">Depósito</label>
+            <div className="space-y-1.5">
+              {depositos.map((d) => (
+                <label
+                  key={d.id}
+                  className={
+                    'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm ' +
+                    (String(seleccion) === String(d.id)
+                      ? 'border-brand bg-brand/5 text-slate-800'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700')
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="deposito-emitir"
+                    value={d.id}
+                    checked={String(seleccion) === String(d.id)}
+                    onChange={() => setSeleccion(String(d.id))}
+                    className="text-brand focus:ring-brand"
+                  />
+                  <span className="font-medium">{d.cliente_nombre}</span>
+                  <span className="text-slate-500">— {d.nombre}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-between items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => onEmitir(null)}
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm"
+          >
+            No descontar
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onCancelar}
+              className="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => onEmitir(seleccion ? Number(seleccion) : null)}
+              disabled={!seleccion}
+              className="px-4 py-2 rounded-lg bg-brand hover:bg-brand-dark text-white text-sm disabled:opacity-50"
+            >
+              Emitir descontando
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -54,10 +54,16 @@ function nuevaLinea() {
 // v1.2.25: aplica los datos de un producto a una linea, calculando precio
 // unitario y base segun cantidad. Usado tanto desde el autocomplete como
 // desde el lookup al teclear codigo manualmente.
-function aplicarProducto(linea, producto) {
-  const precio = Number(producto.precio_compra) > 0
-    ? Number(producto.precio_compra)
-    : Number(linea.precio_unitario) || 0;
+// v1.5.5: respeta proveedor.tarifa_aplicar (T1-T4) para elegir precio.
+function aplicarProducto(linea, producto, proveedor) {
+  const tarifaId = Number(proveedor?.tarifa_aplicar) || 0;
+  const precioTarifa = tarifaId >= 1 && tarifaId <= 4
+    ? Number(producto[`precio_compra_${tarifaId}`]) || 0
+    : 0;
+  const precioBase = Number(producto.precio_compra) || 0;
+  const precio = precioTarifa > 0
+    ? precioTarifa
+    : (precioBase > 0 ? precioBase : (Number(linea.precio_unitario) || 0));
   const cant = Number(linea.cantidad) > 0 ? Number(linea.cantidad) : 1;
   const baseCalc = Math.round(precio * cant * 100) / 100;
   return {
@@ -484,8 +490,11 @@ function GastoEditorModal({ gasto, onClose, onSaved }) {
                       onBlur={(e) => {
                         const p = buscarProductoPorCodigo(e.target.value);
                         if (p) {
+                          const prov = form.proveedor_id
+                            ? proveedoresDisp.find((x) => x.id === form.proveedor_id)
+                            : null;
                           setLineas((arr) =>
-                            arr.map((row, j) => (j === i ? aplicarProducto(row, p) : row)),
+                            arr.map((row, j) => (j === i ? aplicarProducto(row, p, prov) : row)),
                           );
                         }
                       }}
@@ -500,8 +509,11 @@ function GastoEditorModal({ gasto, onClose, onSaved }) {
                       value={l.concepto}
                       onChange={(v) => setLinea(i, { concepto: v })}
                       onSelectProducto={(p) => {
+                        const prov = form.proveedor_id
+                          ? proveedoresDisp.find((x) => x.id === form.proveedor_id)
+                          : null;
                         setLineas((arr) =>
-                          arr.map((row, j) => (j === i ? aplicarProducto(row, p) : row)),
+                          arr.map((row, j) => (j === i ? aplicarProducto(row, p, prov) : row)),
                         );
                       }}
                     />

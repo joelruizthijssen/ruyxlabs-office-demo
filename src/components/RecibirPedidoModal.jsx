@@ -22,6 +22,8 @@ function RecibirPedidoModal({ pedido, lineas, onConfirm, onCancel }) {
   }, [lineas]);
   const [recibidas, setRecibidas] = useState(initial);
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  // v1.5.5: diana_pct aplicado a TODAS las lineas del gasto generado.
+  const [dianaPct, setDianaPct] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -77,7 +79,7 @@ function RecibirPedidoModal({ pedido, lineas, onConfirm, onCancel }) {
         linea_id: Number(linea_id),
         cantidad_recibida,
       }));
-      await onConfirm({ recepciones, fecha_gasto: fecha });
+      await onConfirm({ recepciones, fecha_gasto: fecha, diana_pct_default: dianaPct });
     } catch (e) {
       setError(e?.message || String(e));
       setSubmitting(false);
@@ -130,15 +132,33 @@ function RecibirPedidoModal({ pedido, lineas, onConfirm, onCancel }) {
           >
             Nada recibido
           </button>
-          <div className="ml-auto flex items-center gap-2">
-            <label className="text-xs text-slate-600">Fecha del gasto:</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              disabled={submitting}
-              className="px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-brand"
-            />
+          <div className="ml-auto flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-600">% Diana:</label>
+              <select
+                value={dianaPct}
+                onChange={(e) => setDianaPct(Number(e.target.value))}
+                disabled={submitting}
+                className="px-2 py-1 border border-slate-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand"
+                title="Se aplica a todas las líneas del gasto generado"
+              >
+                <option value={0}>—</option>
+                <option value={50}>D 50%</option>
+                <option value={100}>D 100%</option>
+                <option value={-50}>E 50%</option>
+                <option value={-100}>E 100%</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-600">Fecha del gasto:</label>
+              <input
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                disabled={submitting}
+                className="px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
           </div>
         </div>
 

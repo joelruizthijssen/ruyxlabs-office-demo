@@ -232,12 +232,20 @@ export function pedidoRecibir(pedido_id, opts) {
     const cantRec = recMap.has(l.id) ? recMap.get(l.id) : cantTotal;
     const precio = Number(l.precio_unitario) || 0;
     if (cantRec > 0) {
+      // v1.5.5: copiar iva_pct por linea, descuento_tipo/valor del pedido,
+      // y aplicar diana_pct_default de opts a todas las lineas.
+      const ivaLinea = l.iva_pct != null
+        ? Number(l.iva_pct)
+        : (Number(p.iva_porcentaje) || 0);
       lineasGasto.push({
         concepto: l.titulo || l.descripcion || '—',
         cantidad: cantRec, precio_unitario: precio,
         base_imponible: round2(cantRec * precio),
-        iva_pct: Number(p.iva_porcentaje) || 0,
+        iva_pct: ivaLinea,
         codigo: l.codigo || null,
+        descuento_tipo: l.descuento_tipo || 'pct',
+        descuento_valor: Number(l.descuento_valor) || 0,
+        diana_pct: Number(opts?.diana_pct_default) || 0,
       });
     }
     const cantFalta = round2(cantTotal - cantRec);

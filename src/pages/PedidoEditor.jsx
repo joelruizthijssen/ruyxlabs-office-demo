@@ -55,8 +55,12 @@ function PedidoEditor() {
   const [guardadoOk, setGuardadoOk] = useState(false);
   const [showRecibir, setShowRecibir] = useState(false);
 
-  async function recibirPedido({ recepciones, fecha_gasto }) {
-    const res = await window.api.pedidos.recibir(pedidoId, { recepciones, fecha_gasto });
+  async function recibirPedido({ recepciones, fecha_gasto, diana_pct_default }) {
+    const res = await window.api.pedidos.recibir(pedidoId, {
+      recepciones,
+      fecha_gasto,
+      diana_pct_default,
+    });
     if (res && res.error) throw new Error(res.error);
     setShowRecibir(false);
     if (res?.backorderPedidoId) {
