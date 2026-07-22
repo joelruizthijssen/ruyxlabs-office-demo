@@ -1050,7 +1050,6 @@ function FacturaEditor() {
                 <select
                   className={inputCls + ' bg-white'}
                   value={cab.deposito_id || ''}
-                  disabled={bloqueada}
                   onChange={(e) => setCabField('deposito_id', e.target.value ? Number(e.target.value) : null)}
                 >
                   <option value="">— No descontar —</option>

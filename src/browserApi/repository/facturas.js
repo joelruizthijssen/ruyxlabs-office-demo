@@ -174,6 +174,22 @@ export function facturasUpdate(id, data) {
         depositosRevertirSalidaPorFactura(id);
       }
     }
+    // v1.5.6: permitir cambio de deposito_id en facturas emitidas/cobradas.
+    // La usuaria puede haber emitido sin deposito y despues decidir de
+    // cual sale el material. Antes se descartaba en silencio.
+    if (data && Object.prototype.hasOwnProperty.call(data, 'deposito_id')) {
+      const nuevoDep = data.deposito_id ? Number(data.deposito_id) : null;
+      const prevDep = current.deposito_id || null;
+      if (nuevoDep !== prevDep) {
+        db.prepare(`UPDATE facturas SET deposito_id = :dep, updated_at = datetime('now') WHERE id = :id`)
+          .run({ ':id': id, ':dep': nuevoDep });
+        depositosRevertirSalidaPorFactura(id);
+        const estadoFinal = data?.estado ?? current.estado;
+        if (nuevoDep && estadoFinal !== 'borrador') {
+          depositosAplicarSalidaPorFactura(id);
+        }
+      }
+    }
     return facturasGet(id);
   }
   const m = { ...current, ...data };
